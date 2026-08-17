@@ -120,6 +120,14 @@ Each was invisible under normal testing. Each now has a guard.
   A missing mandated field is far cheaper to fix now, with no production data, than when S6 discovers it
   via a Merchant feed rejection. **Consider re-running these before building further.**
 
+  > **Update — all three ran on 2026-08-17.** See
+  > [`2026-08-17-s1-audit-findings.md`](2026-08-17-s1-audit-findings.md). Both completeness audits pass;
+  > the adversarial pass found four defects, four of which are fixed in migration `0004_audit_integrity`.
+  > The serious one: `order_audit_log` was freely rewritable and deletable by the application role, which
+  > made Approach A's audit trail a convention rather than evidence. It is now append-only. Two items
+  > remain open — an unconstrained `gross_order_value`, and money edits that silently record as
+  > `actor_type='system'` when `SET LOCAL` is forgotten.
+
 ---
 
 ## 7. Open questions
@@ -150,7 +158,9 @@ admin audit, (12) whether a product may attach to a level-1 category, (8)(9)(10)
 
 ## 8. Recommended next steps, in order
 
-1. **Re-run the three audits** (§6). Cheap insurance; likely yields one short migration.
+1. ~~**Re-run the three audits** (§6).~~ **Done 2026-08-17** — yielded migration `0004_audit_integrity`,
+   exactly the "one short migration" predicted. Findings in
+   [`2026-08-17-s1-audit-findings.md`](2026-08-17-s1-audit-findings.md).
 2. **Build the worker/queue layer.** Small, and unblocks S4/S5/S6.
 3. **S1b — promotions.** Required for storefront parity.
 4. **Brainstorm S2 properly**, then spec, then build. §6 of the design doc already fixes the URL contract,
