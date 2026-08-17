@@ -20,6 +20,7 @@ import secrets
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models.categories import Category
@@ -136,7 +137,8 @@ def create_product(db: Session, actor, payload: dict) -> Product:
             detail="slug must be lowercase letters, digits and single hyphens",
         )
 
-    category = db.get(Category, payload["category_id"])
+    category_id = payload.get("category_id")
+    category = db.get(Category, category_id) if category_id is not None else None
     if category is None or category.level != 2:
         # products.category_level is GENERATED ALWAYS AS 2 with a composite FK,
         # so a level-1 category fails as an unreadable FK violation otherwise.
@@ -150,19 +152,41 @@ def create_product(db: Session, actor, payload: dict) -> Product:
             status_code=status.HTTP_409_CONFLICT, detail="slug already in use"
         )
 
-    product = Product(
-        item_group_id=payload.get("item_group_id") or _generate_item_group_id(slug),
-        slug=slug,
-        title=payload["title"].strip(),
-        description=payload.get("description"),
-        brand=payload.get("brand") or "Pixi",
-        category_id=category.id,
-        tags=payload.get("tags") or [],
-        condition=payload.get("condition") or "new",
-        gender=payload.get("gender"),
-        age_group=payload.get("age_group"),
-        status="draft",
-    )
+    # Keys the caller omitted are left out of the constructor entirely rather
+    # than passed as None. gender carries a server_default (this is a women's
+    # footwear store, and section 8 requires gender on every apparel offer for
+    # Merchant Center): SQLAlchemy currently omits a None-valued, server-
+    # defaulted attribute from the INSERT and lets the database supply it, but
+    # that is ORM behaviour we should not depend on staying that way — a
+    # future Python-side `default=` on the column, for instance, would not get
+    # the same treatment and an explicit None would win outright.
+    fields = {
+        "item_group_id": payload.get("item_group_id") or _generate_item_group_id(slug),
+        "slug": slug,
+        "title": payload["title"].strip(),
+        "description": payload.get("description"),
+        "brand": payload.get("brand") or "Pixi",
+        "category_id": category.id,
+        "tags": payload.get("tags") or [],
+        "condition": payload.get("condition") or "new",
+        "status": "draft",
+    }
+    if payload.get("gender") is not None:
+        fields["gender"] = payload["gender"]
+    if payload.get("age_group") is not None:
+        fields["age_group"] = payload["age_group"]
+
+    product = Product(**fields)
     db.add(product)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # The pre-check above handles the common case cheaply; this catches a
+        # concurrent insert of the same slug that lands between the pre-check
+        # and this flush (repositories/register.py has the same pattern for
+        # uq_users_email).
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="slug already in use"
+        )
     return product

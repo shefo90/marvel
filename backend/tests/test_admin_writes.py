@@ -85,3 +85,44 @@ def test_level_1_category_is_rejected(db):
             "title": "X", "slug": "x-prod", "brand": "Pixi", "category_id": top.id,
         })
     assert exc.value.status_code == 400
+
+
+def test_invalid_slug_format_is_rejected_with_400(db):
+    cat = _level2_category(db)
+    with pytest.raises(HTTPException) as exc:
+        create_product(db, _actor(db), {
+            "title": "X", "slug": "Not A Valid Slug!", "brand": "Pixi",
+            "category_id": cat.id,
+        })
+    assert exc.value.status_code == 400
+
+
+def test_nonexistent_category_is_rejected_with_400(db):
+    with pytest.raises(HTTPException) as exc:
+        create_product(db, _actor(db), {
+            "title": "X", "slug": "no-such-category", "brand": "Pixi",
+            "category_id": 999_999_999,
+        })
+    assert exc.value.status_code == 400
+
+
+def test_missing_category_id_is_rejected_with_400(db):
+    """Raw ``payload["category_id"]`` indexing would raise KeyError -> 500 here."""
+    with pytest.raises(HTTPException) as exc:
+        create_product(db, _actor(db), {
+            "title": "X", "slug": "missing-category-id", "brand": "Pixi",
+        })
+    assert exc.value.status_code == 400
+
+
+def test_product_without_explicit_gender_gets_the_column_default(db):
+    """An explicit ``gender=None`` would write NULL over the server_default —
+    this is a women's footwear store, and gender is required on every apparel
+    offer for the Merchant Center feed (requirements section 8)."""
+    cat = _level2_category(db)
+    product = create_product(db, _actor(db), {
+        "title": "Suede Sandal", "slug": "gender-default-check",
+        "brand": "Pixi", "category_id": cat.id,
+    })
+    assert product.gender is not None
+    assert product.gender == "female"
