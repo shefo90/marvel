@@ -15,7 +15,7 @@ behind them.
 
 | Slice | State |
 |---|---|
-| **S1 — commerce core** | Done. 46 tables, 3 migrations, catalog + auth + cart + idempotent orders, 46 tests |
+| **S1 — commerce core** | Done. 46 tables, 4 migrations, catalog + auth + cart + idempotent orders, 51 tests |
 | **S1b — promotions** | Not started. Needed for BOGO / tiered discounts before storefront parity |
 | **S2 — storefront & SEO** | Not started. Rendering decided: React SSR on Vite via Vike |
 | **S3–S7** | Not started |
@@ -76,6 +76,8 @@ These are not tests; they answer specific questions about a running system.
 | `scripts/check_models.py` | Do all 46 models import and every mapper configure? |
 | `scripts/check_db.py` | Does `DB_URL` connect, and what server is it? |
 | `scripts/verify_triggers.py` | Do the audit and immutability triggers actually fire? |
+| `scripts/audit_approach_a.py` | Ten adversarial probes against the money model — what does it actually refuse? |
+| `scripts/audit_audit_log_tamper.py` | Can an audit row be rewritten or selectively deleted? |
 | `scripts/check_identity_parity.py` | Do registration and checkout normalize a shopper identically? |
 | `scripts/check_query_count.py` | Is the catalog listing still O(1) in queries? |
 | `scripts/check_cache_live.py` | Does caching, locale isolation and invalidation work with Redis up? |
@@ -112,9 +114,13 @@ Imports flow one way: `routes → repositories → models → core`. `services/`
   are the identifiers GA4, Google Ads, Merchant Center and the Meta catalog all key on; regenerating one
   silently repoints history.
 - **Money columns are audited by a trigger**, not by application code. Any UPDATE to a money column on
-  `orders` or `order_items` writes an `order_audit_log` row capturing the old value. Do not write audit
-  rows from Python. To attribute a change to a staff member, set `app.actor_user_id`, `app.audit_reason`
-  and `app.audit_source` with `SET LOCAL` in the same transaction.
+  `orders` or `order_items` — and any DELETE of an `order_items` row — writes an `order_audit_log` row
+  capturing the old value. Do not write audit rows from Python. To attribute a change to a staff member,
+  set `app.actor_user_id`, `app.audit_reason` and `app.audit_source` with `SET LOCAL` in the same
+  transaction. Forgetting them is not an error: the row is filed as `actor_type='system'`.
+- **`order_audit_log` is append-only.** UPDATE is always refused; DELETE is refused while the parent order
+  exists. Deleting an order still cascades its audit rows away — that is the one permitted path. Clean up
+  test data by deleting the order, never the audit rows.
 - **Customer identity normalization lives only in `services/identity.py`.** Registration and checkout once
   had separate implementations that disagreed on phone format, which resolved one shopper to two customers
   and corrupted every lifetime-value aggregate without anything failing. Do not add a second copy.

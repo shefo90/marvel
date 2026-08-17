@@ -63,8 +63,8 @@ except psycopg2.Error as e:
 
 print(f"\nP6a (rewrite)={p6a}   P6b (delete)={p6b}")
 
-# cleanup
-cur.execute("DELETE FROM order_audit_log WHERE order_id=%s", (oid,))
+# cleanup — the order cascades its audit rows away, which the append-only
+# trigger permits; deleting them directly first would now be refused.
 cur.execute("DELETE FROM orders WHERE id=%s", (oid,))
 cur.execute("DELETE FROM customers WHERE id=%s", (cust,))
 cur.execute("DELETE FROM categories WHERE id IN (%s,%s)", (cat, top))

@@ -189,7 +189,8 @@ try:
     n = cur.fetchone()[0]
     cur.execute("ROLLBACK TO SAVEPOINT sp6")
     rec("P10", "DELETE an order_items row (revenue vanishes from the order)",
-        "an audit row recording the deletion", f"accepted; {n} 'delete' audit rows written", "GAP")
+        "an audit row recording the deletion", f"accepted; {n} 'delete' audit rows written",
+        "OK" if n else "GAP")
 except psycopg2.Error as e:
     cur.execute("ROLLBACK TO SAVEPOINT sp6")
     rec("P10", "DELETE an order_items row", "audited or refused",
@@ -211,8 +212,9 @@ print("TALLY:", ", ".join(f"{k}={v}" for k, v in sorted(tally.items())))
 
 # ---------------------------------------------------------------- cleanup
 conn.rollback()
-cur.execute("DELETE FROM order_audit_log WHERE order_id=%s", (order_id,))
-cur.execute("DELETE FROM order_items WHERE order_id=%s", (order_id,))
+# Deleting the order cascades to order_items and order_audit_log. Since 0004 the
+# append-only trigger permits exactly that cascade and refuses a selective
+# delete, so the rows must go in this order and not individually.
 cur.execute("DELETE FROM orders WHERE id=%s", (order_id,))
 cur.execute("DELETE FROM customers WHERE id=%s", (cust_id,))
 cur.execute("DELETE FROM product_variants WHERE id=%s", (var_id,))

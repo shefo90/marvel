@@ -1,9 +1,12 @@
-"""Prove the migration 0002 triggers actually work against the live database.
+"""Prove the migration 0002 + 0004 triggers actually work against the live database.
 
 This is the acceptance evidence for the Approach-A decision: because the money
 lives in mutable columns rather than an append-only ledger, the audit trigger is
 the ONLY thing preserving what a value used to be. If it silently does not fire,
 section 11A's auditability requirement is unmet and nothing else would tell us.
+
+0004 added a fifth trigger making order_audit_log append-only, so that record is
+evidence rather than a convention the application role can rewrite.
 
 Run from the backend root:  python scripts/verify_triggers.py
 Rolls everything back — leaves no test data behind.
@@ -48,7 +51,7 @@ print(f"tables: {tables}")
 print(f"triggers: {triggers}\n")
 
 check("47 tables present (46 + alembic_version)", tables == 47, str(tables))
-check("4 triggers installed", len(triggers) == 4, str(len(triggers)))
+check("5 triggers installed", len(triggers) == 5, str(len(triggers)))
 
 # --- The audit trigger ---------------------------------------------------
 print("\naudit trigger:")

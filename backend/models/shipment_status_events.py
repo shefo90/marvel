@@ -12,6 +12,7 @@ is diagnosable after the fact rather than lost.
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     Enum as SAEnum,
@@ -20,6 +21,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import mapped_column, relationship
@@ -47,7 +49,7 @@ class ShipmentStatusEvent(Base):
     reason = mapped_column(String(255), nullable=True)
     location = mapped_column(String(255), nullable=True)
     # Set when the raw status had no mapping row — surfaces silent drift.
-    is_unmapped = mapped_column(String(1), nullable=False, server_default="N")
+    is_unmapped = mapped_column(Boolean, nullable=False, server_default=text("false"))
 
     logical_event_id = mapped_column(String(128), nullable=True)
     payload = mapped_column(JSONB, nullable=False, server_default="{}")
@@ -67,9 +69,6 @@ class ShipmentStatusEvent(Base):
         ),
         UniqueConstraint(
             "logical_event_id", name="uq_shipment_status_events_logical_event"
-        ),
-        CheckConstraint(
-            "is_unmapped IN ('Y','N')", name="ck_shipment_status_events_is_unmapped"
         ),
         Index("ix_shipment_status_events_shipment_id", "shipment_id", "occurred_at"),
         Index("ix_shipment_status_events_status", "status", "occurred_at"),

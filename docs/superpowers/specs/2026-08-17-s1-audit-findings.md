@@ -153,14 +153,31 @@ constraint at all. With no production data this is a free fix; after S6 it is a 
 
 ---
 
-## Recommended migration 0004
+## Resolution — migration `0004_audit_integrity`
 
-| Fix | Risk |
+| Finding | Status |
 |---|---|
-| F1 — append-only trigger on `order_audit_log` | None. Nothing legitimately updates audit rows |
-| F2 — add `unit_list_price` to the money trigger | None |
-| F3 — extend money triggers to `OR DELETE` | None |
-| F6 — convert three varchar flags to `boolean` | Low; needs a `USING (col = 'Y')` cast and model + repository updates |
-| F4 — freeze `gross_order_value` after insert | **Judgment call** — blocks same-day restatement |
+| F1 — audit log not append-only | **Fixed.** `trg_order_audit_log_append_only` refuses UPDATE always, and refuses DELETE while the parent order exists |
+| F2 — `unit_list_price` unaudited | **Fixed.** Added to the `order_items` money trigger's watch list |
+| F3 — DELETE unaudited | **Fixed.** `order_items` trigger is now `AFTER UPDATE OR DELETE`, writing `action='delete'` |
+| F6 — varchar `'Y'`/`'N'` flags | **Fixed.** All three are `boolean`; the partial index `uq_shipments_active_per_order` was rebuilt on the new predicate |
+| F4 — `gross_order_value` unconstrained | **Open.** Deferred pending a decision on whether same-day restatement should be possible |
+| F5 — unattributed money edits | **Open by design.** A trigger cannot distinguish a forgotten `SET LOCAL` from a genuine system change; mitigate in the repository layer and the §13 reconciliation job |
 
-F1–F3 and F6 are mechanical. F4 needs a decision first.
+**Why the DELETE trigger is on `order_items` only:** `order_audit_log.order_id` is `ON DELETE CASCADE`,
+so a row written while deleting an *order* is removed by the same statement — and the FK would reject it
+anyway. Deleting a whole order therefore still discards its audit rows, but that also removes the order
+from every reconciliation, which is loud. Silent selective deletion is what F1 blocks.
+
+### Verification
+
+```
+pytest tests -q                    51 passed   (46 before, 5 new)
+scripts/audit_approach_a.py        OK=8, GAP=1 (P7 = F4, deferred), RESIDUAL RISK=1 (P3 = F5)
+scripts/audit_audit_log_tamper.py  P6a rejected, P6b rejected
+scripts/verify_triggers.py         all trigger checks passed (5 triggers)
+alembic downgrade -1 && upgrade head   round-trips clean
+```
+
+The five new tests were written first and each was watched failing for its own reason — two
+`DID NOT RAISE`, one `NoResultFound`, two assertion failures — before 0004 existed.

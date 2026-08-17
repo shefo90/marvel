@@ -16,6 +16,7 @@ Schema-only in S1 — S4 wires the adapters and webhooks.
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     Enum as SAEnum,
@@ -62,7 +63,7 @@ class Shipment(Base, TimestampMixin):
     )
     is_active = mapped_column(
         # False once cancelled or superseded by a reissued shipment.
-        String(1), nullable=False, server_default="Y"
+        Boolean, nullable=False, server_default=text("true")
     )
 
     # --- Money ------------------------------------------------------------
@@ -100,7 +101,6 @@ class Shipment(Base, TimestampMixin):
             name="uq_shipments_provider_shipment_id",
         ),
         CheckConstraint("shipping_cost >= 0", name="ck_shipments_shipping_cost"),
-        CheckConstraint("is_active IN ('Y','N')", name="ck_shipments_is_active"),
         CheckConstraint(
             "cod_amount IS NULL OR cod_amount >= 0", name="ck_shipments_cod_amount"
         ),
@@ -109,7 +109,7 @@ class Shipment(Base, TimestampMixin):
             "uq_shipments_active_per_order",
             "order_id",
             unique=True,
-            postgresql_where=text("is_active = 'Y'"),
+            postgresql_where=text("is_active"),
         ),
         Index("ix_shipments_order_id", "order_id"),
         Index("ix_shipments_status", "status"),

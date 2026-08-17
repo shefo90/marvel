@@ -30,6 +30,7 @@ table without losing precision or type.
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     Enum as SAEnum,
@@ -72,7 +73,7 @@ class OrderAuditLog(Base):
     # Typed copies for money fields so reconciliation SQL needs no casting.
     old_amount = mapped_column(Numeric(12, 2), nullable=True)
     new_amount = mapped_column(Numeric(12, 2), nullable=True)
-    is_monetary = mapped_column(String(1), nullable=True)
+    is_monetary = mapped_column(Boolean, nullable=True)
 
     reason = mapped_column(Text, nullable=True)
     actor_type = mapped_column(
