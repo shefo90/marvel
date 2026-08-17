@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe scripts/smoke_api.py)",
+      "Bash(./.venv/Scripts/python.exe -c ' *)",
+      "Bash(./.venv/Scripts/python.exe scripts/smoke_orders.py)",
+      "Bash(echo \"run1 exit=$?\")",
+      "Bash(echo \"run2 exit=$?\")",
+      "Bash(./.venv/Scripts/python.exe -m py_compile schema/cart.py repositories/cart.py routes/cart.py scripts/smoke_cart.py)",
+      "Bash(PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe scripts/smoke_auth.py)",
+      "PowerShell(cd F:\\\\marvel_website\\\\backend; $env:PYTHONIOENCODING=\"utf-8\"; foreach \\($s in @\\('smoke_api','smoke_auth','smoke_cart','smoke_orders'\\)\\) { \"===== $s\"; $o = .\\\\.venv\\\\Scripts\\\\python.exe scripts\\\\$s.py 2>&1 | Out-String; $pass=\\([regex]::Matches\\($o,'\\\\[PASS\\\\]'\\)\\).Count; $fail=\\([regex]::Matches\\($o,'\\\\[FAIL\\\\]'\\)\\).Count; \"exit=$LASTEXITCODE pass=$pass fail=$fail\"; if \\($fail -gt 0 -or $LASTEXITCODE -ne 0\\) { \\($o -split \"`n\" | Select-String \"FAIL|Error|Traceback\" | Select-Object -First 5\\) } })",
+      "PowerShell(cd F:\\\\marvel_website\\\\backend; .\\\\.venv\\\\Scripts\\\\python.exe scripts\\\\check_identity_parity.py 2>&1 | Select-Object -Last 30; \"exit=$LASTEXITCODE\")",
+      "PowerShell(cd F:\\\\marvel_website\\\\backend; $env:PYTHONIOENCODING=\"utf-8\"; .\\\\.venv\\\\Scripts\\\\python.exe scripts\\\\check_identity_parity.py 2>&1 | Select-Object -Last 14; \"parity_exit=$LASTEXITCODE\")",
+      "PowerShell(cd F:\\\\marvel_website\\\\backend; $env:PYTHONIOENCODING=\"utf-8\"; foreach \\($s in @\\('smoke_api','smoke_auth','smoke_cart','smoke_orders'\\)\\) { $o = .\\\\.venv\\\\Scripts\\\\python.exe scripts\\\\$s.py 2>&1 | Out-String; $p=\\([regex]::Matches\\($o,'\\\\[PASS\\\\]'\\)\\).Count; $f=\\([regex]::Matches\\($o,'\\\\[FAIL\\\\]'\\)\\).Count; \"$s exit=$LASTEXITCODE pass=$p fail=$f\"; if \\($f -gt 0\\) { \\($o -split \"`n\" | Select-String \"FAIL\" | Select-Object -First 4\\) } })",
+      "PowerShell(cd F:\\\\marvel_website\\\\backend; $env:PYTHONIOENCODING=\"utf-8\"; $tp=0; $tf=0; foreach \\($s in @\\('smoke_api','smoke_auth','smoke_cart','smoke_orders'\\)\\) { $o = .\\\\.venv\\\\Scripts\\\\python.exe scripts\\\\$s.py 2>&1 | Out-String; $p=\\([regex]::Matches\\($o,'\\\\[PASS\\\\]'\\)\\).Count; $f=\\([regex]::Matches\\($o,'\\\\[FAIL\\\\]'\\)\\).Count; $tp+=$p; $tf+=$f; \"$s exit=$LASTEXITCODE pass=$p fail=$f\" }; \"\";  \"TOTAL pass=$tp fail=$tf\"; .\\\\.venv\\\\Scripts\\\\python.exe scripts\\\\check_identity_parity.py 2>&1 | Select-Object -Last 1; .\\\\.venv\\\\Scripts\\\\python.exe scripts\\\\verify_triggers.py 2>&1 | Select-Object -Last 1)"
+    ]
+  }
+}

@@ -1,0 +1,79 @@
+# Local development stack.
+#
+# Postgres is published on 5433, NOT 5432, so this never collides with a
+# PostgreSQL you already run on the host. The API talks to the `db` service by
+# name on the internal network, so the 5433 mapping only matters when you want
+# to connect from the host (psql, a GUI, or the test suite).
+#
+# Redis is published on the standard 6379. If you started a standalone Redis
+# earlier, remove it first or this will fail to bind:
+#     docker rm -f marvel-redis
+
+services:
+  db:
+    image: postgres:17
+    container_name: marvel-db
+    environment:
+      POSTGRES_USER: marvel
+      POSTGRES_PASSWORD: marvel
+      POSTGRES_DB: marvel
+    ports:
+      - "5433:5432"
+    volumes:
+      - marvel_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # The API must not start migrating against a server that is still booting.
+      test: ["CMD-SHELL", "pg_isready -U marvel -d marvel"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: marvel-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: ./backend
+    container_name: marvel-api
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Service names, not localhost — inside the network the API reaches
+      # Postgres on 5432 regardless of the host-side 5433 mapping.
+      DB_URL: postgresql+psycopg2://marvel:marvel@db:5432/marvel
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      # Dev-only. A real deployment supplies this from a secret manager;
+      # section 13 forbids secrets living in tracked files.
+      SECRET_KEY: dev-only-secret-change-before-any-deployment
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+      REFRESH_TOKEN_EXPIRE_DAYS: "14"
+      DEFAULT_CURRENCY: EGP
+      DEFAULT_LOCALE: en
+      HOUSE_BRAND: Pixi
+      ORDER_NUMBER_PREFIX: ORD
+      IDEMPOTENCY_TTL_HOURS: "24"
+      GUEST_CART_TTL_DAYS: "30"
+      CUSTOMER_CART_TTL_DAYS: "90"
+      CART_ABANDONED_AFTER_HOURS: "24"
+    ports:
+      - "8000:8000"
+    # Migrations run before the server accepts traffic. Tables are never created
+    # from application code (see the backend architecture rules).
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn main:app --host 0.0.0.0 --port 8000"
+
+volumes:
+  marvel_pgdata:

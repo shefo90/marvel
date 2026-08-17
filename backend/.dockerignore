@@ -1,0 +1,13 @@
+__pycache__
+*.py[cod]
+venv
+.venv
+.env
+.pytest_cache
+.mypy_cache
+tests
+
+# NOTE: alembic/ is deliberately NOT ignored. The container runs
+# `alembic upgrade head` on startup (see docker-compose.yml), so excluding the
+# migration scripts makes the API fail to boot with
+# "Path doesn't exist: '/app/alembic'".
