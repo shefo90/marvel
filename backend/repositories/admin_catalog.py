@@ -15,13 +15,20 @@ its translations, and the total. ``scripts/check_query_count.py`` enforces a
 budget on the public listing for the same reason.
 """
 
+import re
+import secrets
+
+from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from models.categories import Category
 from models.product_images import ProductImage
 from models.product_translations import ProductTranslation
 from models.product_variants import ProductVariant
 from models.products import Product
+
+_SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
 
 def list_products_for_admin(
@@ -107,3 +114,55 @@ def list_products_for_admin(
         "page_size": page_size,
         "total": db.execute(count_stmt).scalar_one(),
     }
+
+
+def _generate_item_group_id(slug: str) -> str:
+    """Merchant's variant-grouping key. Derived, never typed.
+
+    Uppercased alphanumerics from the slug plus a short random suffix, because
+    item_group_id is UNIQUE and two products may share a slug stem across
+    categories.
+    """
+    stem = re.sub(r"[^A-Z0-9]", "", slug.upper())[:16] or "PROD"
+    return f"{stem}-{secrets.token_hex(3).upper()}"
+
+
+def create_product(db: Session, actor, payload: dict) -> Product:
+    """Create a product in draft. Nothing is published by this call."""
+    slug = (payload.get("slug") or "").strip().lower()
+    if not _SLUG_RE.match(slug):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="slug must be lowercase letters, digits and single hyphens",
+        )
+
+    category = db.get(Category, payload["category_id"])
+    if category is None or category.level != 2:
+        # products.category_level is GENERATED ALWAYS AS 2 with a composite FK,
+        # so a level-1 category fails as an unreadable FK violation otherwise.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="products attach to level-2 categories only",
+        )
+
+    if db.execute(select(Product.id).where(Product.slug == slug)).first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="slug already in use"
+        )
+
+    product = Product(
+        item_group_id=payload.get("item_group_id") or _generate_item_group_id(slug),
+        slug=slug,
+        title=payload["title"].strip(),
+        description=payload.get("description"),
+        brand=payload.get("brand") or "Pixi",
+        category_id=category.id,
+        tags=payload.get("tags") or [],
+        condition=payload.get("condition") or "new",
+        gender=payload.get("gender"),
+        age_group=payload.get("age_group"),
+        status="draft",
+    )
+    db.add(product)
+    db.flush()
+    return product

@@ -10,13 +10,18 @@ No SQLAlchemy in this layer.
 """
 
 from fastapi import APIRouter, Depends, Query
+from fastapi import status as http_status
 from sqlalchemy.orm import Session
 
 from core.db import get_db
 from models.users import User
-from repositories.admin_catalog import list_products_for_admin
+from repositories.admin_catalog import create_product, list_products_for_admin
 from routes.admin_deps import staff_at_least
-from schema.admin_catalog import admin_product_list_response
+from schema.admin_catalog import (
+    admin_product_create,
+    admin_product_detail,
+    admin_product_list_response,
+)
 from services.role_access_level import LEVEL_CATALOG
 
 router = APIRouter(prefix="/api/admin", tags=["admin-catalog"])
@@ -40,3 +45,20 @@ def admin_list_products(
     return list_products_for_admin(
         db, page=page, page_size=page_size, status=status, search=search
     )
+
+
+@router.post(
+    "/products",
+    response_model=admin_product_detail,
+    status_code=http_status.HTTP_201_CREATED,
+)
+def admin_create_product(
+    payload: admin_product_create,
+    actor: User = Depends(staff_at_least(LEVEL_CATALOG)),
+    db: Session = Depends(get_db),
+):
+    """Create a product in draft. Publishing is a separate, validated step."""
+    product = create_product(db, actor, payload.model_dump(exclude_none=False))
+    db.commit()
+    db.refresh(product)
+    return product
