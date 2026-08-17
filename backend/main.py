@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from sqlalchemy import text
 
 from core.db import Engine
-from routes import auth, cart, order, product, refresh, register
+from routes import admin_catalog, auth, cart, order, product, refresh, register
 from services import cache
 
 app = FastAPI(
@@ -15,6 +15,10 @@ app = FastAPI(
     ),
     version="0.1.0",
 )
+
+# Registered before the locale-scoped routers so "/api/admin/..." is matched as
+# a literal path and never offered to "/api/{locale}/..." as locale="admin".
+app.include_router(admin_catalog.router)
 
 app.include_router(product.router)
 app.include_router(register.router)
