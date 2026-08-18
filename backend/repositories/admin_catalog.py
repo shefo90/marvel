@@ -17,6 +17,7 @@ budget on the public listing for the same reason.
 
 import re
 import secrets
+from decimal import Decimal
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
@@ -289,3 +290,71 @@ def _invalidate(
     cache.invalidate_product(product_id, slugs)
     if stale:
         cache.delete(*(cache.key(cache.NS_PRODUCT, loc, slug) for loc, slug in stale))
+
+
+def _variant_sku(item_group_id: str, size: str, color: str) -> str:
+    """Deterministic and constraint-shaped: ^[A-Z0-9][A-Z0-9-]*$."""
+    parts = [item_group_id, size, color]
+    cleaned = ["".join(ch for ch in p.upper() if ch.isalnum()) for p in parts]
+    return "-".join(part for part in cleaned if part)
+
+
+def generate_variants(db, actor, product_id: int, sizes, colors, defaults: dict):
+    """Create the size x colour cross product, skipping combinations that exist.
+
+    SKUs are generated because they are immutable once written
+    (trg_variants_sku_immutable) — a typo would otherwise be permanent.
+    """
+    product = db.get(Product, product_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail="product not found")
+
+    price = Decimal(str(defaults.get("price", "0")))
+    sale_price = defaults.get("sale_price")
+    sale_price = Decimal(str(sale_price)) if sale_price is not None else None
+    if sale_price is not None and sale_price > price:
+        raise HTTPException(
+            status_code=400, detail="sale price cannot exceed the price"
+        )
+
+    existing = {
+        (v.size, v.color)
+        for v in db.execute(
+            select(ProductVariant).where(ProductVariant.product_id == product_id)
+        ).scalars()
+    }
+
+    created = []
+    for size in sizes:
+        for color in colors:
+            if (size, color) in existing:
+                continue
+            variant = ProductVariant(
+                product_id=product_id,
+                sku=_variant_sku(product.item_group_id, size, color),
+                variant_title=f"{size} / {color}",
+                size=size,
+                size_system=defaults.get("size_system"),
+                color=color,
+                material=defaults.get("material"),
+                attributes={},
+                price=price,
+                sale_price=sale_price,
+                currency="EGP",
+                cost=None,  # COGS is admin-gated; set on the variant edit screen
+                availability=defaults.get("availability", "in_stock"),
+                stock_quantity=int(defaults.get("stock_quantity", 0)),
+                merchant_eligible=True,
+                is_active=True,
+            )
+            db.add(variant)
+            created.append(variant)
+
+    db.flush()
+
+    if created and product.default_variant_id is None:
+        product.default_variant_id = created[0].id
+        db.flush()
+
+    _invalidate(db, product_id)
+    return created

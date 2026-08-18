@@ -17,6 +17,7 @@ from core.db import get_db
 from models.users import User
 from repositories.admin_catalog import (
     create_product,
+    generate_variants,
     list_products_for_admin,
     upsert_translation,
 )
@@ -27,6 +28,8 @@ from schema.admin_catalog import (
     admin_product_list_response,
     admin_translation_detail,
     admin_translation_upsert,
+    admin_variant_matrix,
+    admin_variant_row,
 )
 from services.role_access_level import LEVEL_CATALOG
 
@@ -89,3 +92,25 @@ def admin_upsert_translation(
     db.commit()
     db.refresh(tr)
     return tr
+
+
+@router.post(
+    "/products/{product_id}/variants",
+    response_model=list[admin_variant_row],
+    status_code=http_status.HTTP_201_CREATED,
+)
+def admin_generate_variants(
+    product_id: int,
+    payload: admin_variant_matrix,
+    actor: User = Depends(staff_at_least(LEVEL_CATALOG)),
+    db: Session = Depends(get_db),
+):
+    """Generate the size x colour matrix. Existing combinations are skipped."""
+    created = generate_variants(
+        db, actor, product_id, payload.sizes, payload.colors,
+        payload.model_dump(exclude={"sizes", "colors"}, exclude_none=True),
+    )
+    db.commit()
+    for v in created:
+        db.refresh(v)
+    return created

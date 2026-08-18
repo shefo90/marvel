@@ -1,5 +1,7 @@
 """Admin catalog contracts. No logic here — see repositories/admin_catalog.py."""
 
+from decimal import Decimal
+
 from pydantic import BaseModel, Field
 
 
@@ -73,3 +75,26 @@ class admin_translation_detail(BaseModel):
     meta_description: str | None
     is_published: bool
     is_complete: bool
+
+
+class admin_variant_matrix(BaseModel):
+    sizes: list[str] = Field(min_length=1)
+    colors: list[str] = Field(min_length=1)
+    price: Decimal
+    sale_price: Decimal | None = None
+    stock_quantity: int = 0
+    availability: str = "in_stock"
+    size_system: str | None = None
+    material: str | None = None
+
+
+class admin_variant_row(BaseModel):
+    id: int
+    sku: str
+    variant_title: str
+    size: str | None
+    color: str | None
+    price: Decimal
+    sale_price: Decimal | None
+    stock_quantity: int
+    is_active: bool

@@ -9,7 +9,7 @@ from models.locales import Locale
 from models.product_translations import ProductTranslation
 from models.url_redirects import UrlRedirect
 from models.users import User
-from repositories.admin_catalog import create_product, upsert_translation
+from repositories.admin_catalog import create_product, generate_variants, upsert_translation
 from services import cache
 
 
@@ -267,3 +267,70 @@ def test_publishing_an_incomplete_translation_is_rejected_with_422(db):
         )
     ).scalar_one_or_none()
     assert tr is None or tr.is_published is False
+
+
+def test_matrix_creates_one_variant_per_size_and_colour(db):
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "mx-sandal", "brand": "Pixi", "category_id": cat.id,
+    })
+
+    variants = generate_variants(
+        db, actor, p.id, ["38", "39"], ["black", "tan"], {"price": "500.00"}
+    )
+
+    assert len(variants) == 4
+
+
+def test_generated_skus_match_the_format_constraint(db):
+    import re
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "mx-sandal-2", "brand": "Pixi", "category_id": cat.id,
+    })
+
+    variants = generate_variants(db, actor, p.id, ["38"], ["black"], {"price": "500.00"})
+
+    assert re.match(r"^[A-Z0-9][A-Z0-9-]*$", variants[0].sku)
+
+
+def test_first_generated_variant_becomes_the_default(db):
+    """ck_products_active_has_default_variant blocks publishing without one."""
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "mx-sandal-3", "brand": "Pixi", "category_id": cat.id,
+    })
+
+    variants = generate_variants(db, actor, p.id, ["38"], ["black"], {"price": "500.00"})
+
+    db.refresh(p)
+    assert p.default_variant_id == variants[0].id
+
+
+def test_regenerating_an_existing_combination_is_skipped_not_duplicated(db):
+    """UNIQUE(product_id, size, color, material) would otherwise raise."""
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "mx-sandal-4", "brand": "Pixi", "category_id": cat.id,
+    })
+    generate_variants(db, actor, p.id, ["38"], ["black"], {"price": "500.00"})
+
+    second = generate_variants(
+        db, actor, p.id, ["38", "39"], ["black"], {"price": "500.00"}
+    )
+
+    assert len(second) == 1
+    assert second[0].size == "39"
+
+
+def test_sale_price_above_price_is_rejected(db):
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "mx-sandal-5", "brand": "Pixi", "category_id": cat.id,
+    })
+
+    with pytest.raises(HTTPException) as exc:
+        generate_variants(db, actor, p.id, ["38"], ["black"],
+                          {"price": "500.00", "sale_price": "600.00"})
+
+    assert exc.value.status_code == 400
