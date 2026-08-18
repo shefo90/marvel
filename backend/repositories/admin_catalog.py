@@ -488,6 +488,71 @@ def get_product_for_admin(db, product_id: int) -> dict:
     }
 
 
+_EDITABLE_BASE_FIELDS = (
+    "title", "description", "brand", "tags",
+    "condition", "gender", "age_group",
+)
+
+
+def update_product(db, actor, product_id: int, payload: dict):
+    """Edit base (non-translated) fields. Status changes go through publish/archive."""
+    product = db.get(Product, product_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail="product not found")
+
+    if "slug" in payload and payload["slug"] != product.slug:
+        slug = (payload["slug"] or "").strip().lower()
+        if not _SLUG_RE.match(slug):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="base slug must be ASCII lowercase, digits and single hyphens",
+            )
+        if db.execute(
+            select(Product.id).where(Product.slug == slug, Product.id != product_id)
+        ).first():
+            raise HTTPException(status_code=409, detail="slug already in use")
+        product.slug = slug
+
+    if "category_id" in payload:
+        category = db.get(Category, payload["category_id"])
+        if category is None or category.level != 2:
+            raise HTTPException(
+                status_code=400, detail="products attach to level-2 categories only"
+            )
+        product.category_id = category.id
+
+    for field in _EDITABLE_BASE_FIELDS:
+        if field in payload:
+            setattr(product, field, payload[field])
+
+    db.flush()
+    _invalidate(db, product_id)
+    return product
+
+
+def archive_product(db, actor, product_id: int):
+    """Retire a product without deleting it.
+
+    fk_order_items_product_id is ON DELETE RESTRICT, so anything sold cannot be
+    deleted at all — and deleting would orphan the history GA4, Merchant Center
+    and the Meta catalog key on. Every language is unpublished so the storefront
+    stops serving it in both locales.
+    """
+    product = db.get(Product, product_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail="product not found")
+
+    for tr in db.execute(
+        select(ProductTranslation).where(ProductTranslation.product_id == product_id)
+    ).scalars():
+        tr.is_published = False
+
+    product.status = "archived"
+    db.flush()
+    _invalidate(db, product_id)
+    return product
+
+
 def publish_readiness(db: Session, product_id: int, locale: str) -> list[dict]:
     """What still blocks this language from publishing, as data.
 

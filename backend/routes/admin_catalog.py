@@ -16,12 +16,14 @@ from sqlalchemy.orm import Session
 from core.db import get_db
 from models.users import User
 from repositories.admin_catalog import (
+    archive_product,
     create_product,
     generate_variants,
     get_product_for_admin,
     list_products_for_admin,
     publish_product,
     publish_readiness,
+    update_product,
     upsert_translation,
 )
 from routes.admin_deps import staff_at_least
@@ -31,6 +33,7 @@ from schema.admin_catalog import (
     admin_product_detail,
     admin_product_full,
     admin_product_list_response,
+    admin_product_update,
     admin_translation_detail,
     admin_translation_upsert,
     admin_variant_matrix,
@@ -129,6 +132,35 @@ def admin_get_product(
 ):
     """Load a product for editing, drafts and unpublished languages included."""
     return get_product_for_admin(db, product_id)
+
+
+@router.patch("/products/{product_id}", response_model=admin_product_detail)
+def admin_update_product(
+    product_id: int,
+    payload: admin_product_update,
+    actor: User = Depends(staff_at_least(LEVEL_CATALOG)),
+    db: Session = Depends(get_db),
+):
+    """Edit base fields. Only fields actually sent are changed."""
+    product = update_product(
+        db, actor, product_id, payload.model_dump(exclude_unset=True)
+    )
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+@router.post("/products/{product_id}/archive", response_model=admin_product_detail)
+def admin_archive_product(
+    product_id: int,
+    actor: User = Depends(staff_at_least(LEVEL_CATALOG)),
+    db: Session = Depends(get_db),
+):
+    """Retire a product. Never deletes — sold products cannot be deleted at all."""
+    product = archive_product(db, actor, product_id)
+    db.commit()
+    db.refresh(product)
+    return product
 
 
 @router.get("/products/{product_id}/readiness", response_model=list[admin_blocker])

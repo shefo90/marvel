@@ -105,6 +105,18 @@ class admin_variant_row(BaseModel):
     is_active: bool
 
 
+class admin_product_update(BaseModel):
+    title: str | None = None
+    slug: str | None = None
+    brand: str | None = None
+    category_id: int | None = None
+    description: str | None = None
+    tags: list[str] | None = None
+    condition: str | None = None
+    gender: str | None = None
+    age_group: str | None = None
+
+
 class admin_product_full(BaseModel):
     id: int
     item_group_id: str

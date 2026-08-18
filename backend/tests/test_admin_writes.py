@@ -9,14 +9,17 @@ from sqlalchemy import select
 from models.categories import Category
 from models.locales import Locale
 from models.product_translations import ProductTranslation
+from models.products import Product
 from models.url_redirects import UrlRedirect
 from models.users import User
 from repositories.admin_catalog import (
+    archive_product,
     create_product,
     generate_variants,
     get_product_for_admin,
     publish_product,
     publish_readiness,
+    update_product,
     upsert_translation,
 )
 from services import cache
@@ -604,3 +607,61 @@ def test_editor_load_of_a_missing_product_is_404(db):
     with pytest.raises(HTTPException) as exc:
         get_product_for_admin(db, 10**9)
     assert exc.value.status_code == 404
+
+
+def test_base_fields_can_be_edited(db):
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Old", "slug": "edit-1", "brand": "Pixi", "category_id": cat.id,
+    })
+
+    updated = update_product(db, actor, p.id, {"title": "New", "brand": "Pixi"})
+
+    assert updated.title == "New"
+
+
+def test_base_slug_must_stay_ascii(db):
+    """products.slug has an ASCII allowlist; only translation slugs take Arabic."""
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "X", "slug": "edit-2", "brand": "Pixi", "category_id": cat.id,
+    })
+
+    with pytest.raises(HTTPException) as exc:
+        update_product(db, actor, p.id, {"slug": "صندل"})
+
+    assert exc.value.status_code == 400
+
+
+def test_archiving_leaves_the_row_in_place(db):
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "X", "slug": "edit-3", "brand": "Pixi", "category_id": cat.id,
+    })
+
+    archive_product(db, actor, p.id)
+
+    db.refresh(p)
+    assert p.status == "archived"
+    assert db.get(Product, p.id) is not None
+
+
+def test_archiving_unpublishes_every_language(db):
+    """An archived product must stop being served, in both locales."""
+    _locale(db, "ar")
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "X", "slug": "edit-4", "brand": "Pixi", "category_id": cat.id,
+    })
+    generate_variants(db, actor, p.id, ["38"], ["black"], {"price": "500.00"})
+    upsert_translation(db, actor, p.id, "ar", {
+        "title": "صندل", "description": "وصف", "meta_description": "قصير",
+    })
+    publish_product(db, actor, p.id, "ar")
+
+    archive_product(db, actor, p.id)
+
+    tr = db.execute(
+        select(ProductTranslation).where(ProductTranslation.product_id == p.id)
+    ).scalar_one()
+    assert tr.is_published is False
