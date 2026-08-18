@@ -50,3 +50,26 @@ class admin_product_detail(BaseModel):
     brand: str
     status: str
     category_id: int
+
+
+class admin_translation_upsert(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    slug: str | None = None
+    seo_title: str | None = None
+    meta_description: str | None = None
+    og_title: str | None = None
+    og_description: str | None = None
+    og_image_url: str | None = None
+    image_alt: str | None = None
+    is_published: bool | None = None
+
+
+class admin_translation_detail(BaseModel):
+    locale: str
+    title: str | None
+    description: str | None
+    slug: str
+    meta_description: str | None
+    is_published: bool
+    is_complete: bool

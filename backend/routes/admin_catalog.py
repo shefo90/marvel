@@ -15,12 +15,18 @@ from sqlalchemy.orm import Session
 
 from core.db import get_db
 from models.users import User
-from repositories.admin_catalog import create_product, list_products_for_admin
+from repositories.admin_catalog import (
+    create_product,
+    list_products_for_admin,
+    upsert_translation,
+)
 from routes.admin_deps import staff_at_least
 from schema.admin_catalog import (
     admin_product_create,
     admin_product_detail,
     admin_product_list_response,
+    admin_translation_detail,
+    admin_translation_upsert,
 )
 from services.role_access_level import LEVEL_CATALOG
 
@@ -62,3 +68,24 @@ def admin_create_product(
     db.commit()
     db.refresh(product)
     return product
+
+
+@router.put(
+    "/products/{product_id}/translations/{locale}",
+    response_model=admin_translation_detail,
+)
+def admin_upsert_translation(
+    product_id: int,
+    locale: str,
+    payload: admin_translation_upsert,
+    actor: User = Depends(staff_at_least(LEVEL_CATALOG)),
+    db: Session = Depends(get_db),
+):
+    """Create or replace one language's content for a product."""
+    tr = upsert_translation(
+        db, actor, product_id, locale,
+        payload.model_dump(exclude_unset=True),
+    )
+    db.commit()
+    db.refresh(tr)
+    return tr

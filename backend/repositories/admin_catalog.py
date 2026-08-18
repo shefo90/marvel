@@ -28,8 +28,13 @@ from models.product_images import ProductImage
 from models.product_translations import ProductTranslation
 from models.product_variants import ProductVariant
 from models.products import Product
+from repositories.admin_slugs import normalize_translation_slug, record_slug_change
+from services import cache
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+
+# ck_product_translations_published_requires_content
+_PUBLISHABLE_FIELDS = ("title", "description", "meta_description")
 
 
 def list_products_for_admin(
@@ -190,3 +195,78 @@ def create_product(db: Session, actor, payload: dict) -> Product:
             status_code=status.HTTP_409_CONFLICT, detail="slug already in use"
         )
     return product
+
+
+def upsert_translation(db: Session, actor, product_id: int, locale: str, payload: dict) -> ProductTranslation:
+    """Create or update one locale's content. Publishing is per-language.
+
+    is_complete is derived, never taken from the caller: it means "has every
+    field the publish CHECK requires", so the operator's readiness view cannot
+    disagree with what the database will actually accept.
+    """
+    product = db.get(Product, product_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail="product not found")
+
+    tr = db.execute(
+        select(ProductTranslation).where(
+            ProductTranslation.product_id == product_id,
+            ProductTranslation.locale == locale,
+        )
+    ).scalar_one_or_none()
+
+    is_new = tr is None
+    if is_new:
+        tr = ProductTranslation(
+            product_id=product_id, locale=locale,
+            translation_source="human", is_published=False,
+        )
+        db.add(tr)
+
+    old_slug = None if is_new else tr.slug
+    was_published = False if is_new else tr.is_published
+
+    for field in ("title", "description", "seo_title", "meta_description",
+                  "og_title", "og_description", "og_image_url", "image_alt"):
+        if field in payload:
+            setattr(tr, field, payload[field])
+
+    if payload.get("slug"):
+        tr.slug = normalize_translation_slug(payload["slug"])
+    elif is_new:
+        tr.slug = normalize_translation_slug(payload.get("title") or product.slug)
+
+    if "is_published" in payload:
+        tr.is_published = bool(payload["is_published"])
+
+    db.flush()
+    db.refresh(tr)
+
+    # A draft has never been indexed, so a redirect from it would be noise.
+    if was_published and old_slug and old_slug != tr.slug:
+        record_slug_change(
+            db, locale=locale, old_slug=old_slug,
+            product_id=product_id, actor_id=actor.id,
+        )
+        db.flush()
+
+    _invalidate(db, product_id)
+    return tr
+
+
+def _invalidate(db: Session, product_id: int) -> None:
+    """Drop every cached copy of this product, in every locale it has.
+
+    invalidate_product's docstring is explicit that a missing locale leaves that
+    locale serving stale content, so the map is read from the rows rather than
+    assumed.
+    """
+    slugs = {
+        loc: slug
+        for loc, slug in db.execute(
+            select(ProductTranslation.locale, ProductTranslation.slug).where(
+                ProductTranslation.product_id == product_id
+            )
+        ).all()
+    }
+    cache.invalidate_product(product_id, slugs)
