@@ -14,6 +14,7 @@ from fastapi import status as http_status
 from sqlalchemy.orm import Session
 
 from core.db import get_db
+from core.enums import ProductStatus
 from models.users import User
 from repositories.admin_catalog import (
     archive_product,
@@ -50,7 +51,12 @@ router = APIRouter(prefix="/api/admin", tags=["admin-catalog"])
 def admin_list_products(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
-    status: str | None = Query(None, description="Filter to one lifecycle state"),
+    # Typed, not free text: an unknown status silently matched nothing and
+    # returned an empty page, which reads as "no products" rather than "that
+    # is not a status".
+    status: ProductStatus | None = Query(
+        None, description="Filter to one lifecycle state"
+    ),
     search: str | None = Query(None, description="Match base title or slug"),
     actor: User = Depends(staff_at_least(LEVEL_CATALOG)),
     db: Session = Depends(get_db),

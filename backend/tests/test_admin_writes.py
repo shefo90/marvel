@@ -6,6 +6,7 @@ from decimal import Decimal
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from models.categories import Category
 from models.locales import Locale
@@ -905,3 +906,274 @@ def test_shipping_dimensions_are_editable(db):
     assert updated.length_cm == Decimal("12.50")
     assert updated.width_cm == Decimal("8.00")
     assert updated.height_cm == Decimal("5.25")
+
+
+# --- Whole-branch review fixes (C1, C2, I3, B2) -----------------------------
+
+
+def _publishable(**overrides) -> dict:
+    payload = {"title": "Title", "description": "Desc", "meta_description": "Meta"}
+    payload.update(overrides)
+    return payload
+
+
+def test_publishing_with_an_empty_title_is_rejected(db):
+    """C1: the publish gate tested ``is None`` while publish_readiness tested
+    falsiness, so "" passed the write path, satisfied the NULL-only CHECK, and
+    landed as published -- a sitemap-submitted URL with an empty <title>."""
+    _locale(db, "ar")
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "c1-empty", "brand": "Pixi", "category_id": cat.id,
+    })
+
+    with pytest.raises(HTTPException) as exc:
+        upsert_translation(db, actor, p.id, "ar", _publishable(
+            title="", slug="c1-empty-ar", is_published=True,
+        ))
+
+    assert exc.value.status_code == 422
+    tr = db.execute(
+        select(ProductTranslation).where(ProductTranslation.product_id == p.id)
+    ).scalar_one_or_none()
+    assert tr is None or tr.is_published is False
+
+
+def test_publishing_with_a_whitespace_only_title_is_rejected(db):
+    """C1: whitespace is not content. The CHECK cannot see the difference --
+    "   " IS NOT NULL -- so the refusal has to happen here."""
+    _locale(db, "ar")
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "c1-blank", "brand": "Pixi", "category_id": cat.id,
+    })
+
+    with pytest.raises(HTTPException) as exc:
+        upsert_translation(db, actor, p.id, "ar", _publishable(
+            title="   ", slug="c1-blank-ar", is_published=True,
+        ))
+
+    assert exc.value.status_code == 422
+
+
+def test_readiness_agrees_that_a_whitespace_only_title_is_missing(db):
+    """C1: the two implementations of one rule must not disagree -- that
+    disagreement was the defect, not either answer on its own."""
+    _locale(db, "ar")
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "c1-readiness", "brand": "Pixi",
+        "category_id": cat.id,
+    })
+    upsert_translation(db, actor, p.id, "ar", _publishable(
+        title="   ", slug="c1-readiness-ar",
+    ))
+
+    blockers = publish_readiness(db, p.id, "ar")
+
+    assert "incomplete_translation" in {b["code"] for b in blockers}
+
+
+def test_clearing_the_title_of_a_published_translation_is_rejected(db):
+    """C1, the other way in: the gate only fired when the payload asked to
+    publish, so emptying a field on an already-published row skipped it
+    entirely and left exactly the same published-with-no-title row."""
+    _locale(db, "ar")
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "c1-clear", "brand": "Pixi", "category_id": cat.id,
+    })
+    upsert_translation(db, actor, p.id, "ar", _publishable(
+        slug="c1-clear-ar", is_published=True,
+    ))
+
+    with pytest.raises(HTTPException) as exc:
+        upsert_translation(db, actor, p.id, "ar", {"title": ""})
+
+    assert exc.value.status_code == 422
+
+
+def _active_redirects(db, product_id: int) -> list[UrlRedirect]:
+    return list(db.execute(
+        select(UrlRedirect).where(
+            UrlRedirect.entity_id == product_id, UrlRedirect.is_active.is_(True)
+        )
+    ).scalars())
+
+
+def test_renaming_a_published_slug_back_and_forth_is_accepted(db):
+    """C2: record_slug_change blind-inserted, so renaming a->b->a->b hit
+    uq_url_redirects_locale_from_fold on the second insert of /ar/products/a --
+    an uncaught IntegrityError, a 500, and the rename lost."""
+    _locale(db, "ar")
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "c2-loop", "brand": "Pixi", "category_id": cat.id,
+    })
+    upsert_translation(db, actor, p.id, "ar", _publishable(
+        slug="c2-a", is_published=True,
+    ))
+
+    for slug in ("c2-b", "c2-a", "c2-b"):
+        upsert_translation(db, actor, p.id, "ar", {"slug": slug})
+
+    tr = db.execute(
+        select(ProductTranslation).where(ProductTranslation.product_id == p.id)
+    ).scalar_one()
+    assert tr.slug == "c2-b"
+
+
+def test_renaming_back_to_a_retired_slug_retires_its_redirect(db):
+    """C2: redirects are entity-targeted, so after a->b->a the row
+    "/ar/products/a -> this product" is still active while the product lives at
+    ``a`` again -- the resolver would 301 that URL to itself."""
+    _locale(db, "ar")
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "c2-back", "brand": "Pixi", "category_id": cat.id,
+    })
+    upsert_translation(db, actor, p.id, "ar", _publishable(
+        slug="c2-back-a", is_published=True,
+    ))
+
+    upsert_translation(db, actor, p.id, "ar", {"slug": "c2-back-b"})
+    upsert_translation(db, actor, p.id, "ar", {"slug": "c2-back-a"})
+
+    live = [r.from_path for r in _active_redirects(db, p.id)]
+    assert "/ar/products/c2-back-a" not in live
+    assert live == ["/ar/products/c2-back-b"]
+
+
+def test_a_redirect_from_a_slug_another_product_took_is_repointed(db):
+    """C2: uq_product_translations_locale_slug frees a retired slug, so another
+    product may take it. The stale row must stop pointing at the old product --
+    otherwise a live URL 301s to the wrong product -- and a later rename must
+    re-point that one row rather than insert a duplicate."""
+    _locale(db, "ar")
+    cat, actor = _level2_category(db), _actor(db)
+    x = create_product(db, actor, {
+        "title": "X", "slug": "c2-x", "brand": "Pixi", "category_id": cat.id,
+    })
+    y = create_product(db, actor, {
+        "title": "Y", "slug": "c2-y", "brand": "Pixi", "category_id": cat.id,
+    })
+    upsert_translation(db, actor, x.id, "ar", _publishable(
+        slug="c2-shared", is_published=True,
+    ))
+    upsert_translation(db, actor, x.id, "ar", {"slug": "c2-x-moved"})
+
+    # Y now takes the freed slug, then moves off it in turn.
+    upsert_translation(db, actor, y.id, "ar", _publishable(
+        slug="c2-shared", is_published=True,
+    ))
+    assert _active_redirects(db, x.id) == [] or all(
+        r.from_path != "/ar/products/c2-shared" for r in _active_redirects(db, x.id)
+    )
+    upsert_translation(db, actor, y.id, "ar", {"slug": "c2-y-moved"})
+
+    rows = list(db.execute(
+        select(UrlRedirect).where(
+            UrlRedirect.from_path_fold == "/ar/products/c2-shared"
+        )
+    ).scalars())
+    assert len(rows) == 1
+    assert rows[0].entity_id == y.id
+    assert rows[0].is_active is True
+
+
+def test_a_not_null_violation_is_not_reported_as_a_slug_conflict(db):
+    """I3: both write paths caught IntegrityError and answered 409 "slug
+    already in use" whatever the violation was, so PATCH {"title": null} --
+    a NOT NULL violation, nothing to do with slugs -- reported a collision
+    that had not happened. An honest error beats a confident wrong one."""
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "i3-notnull", "brand": "Pixi",
+        "category_id": cat.id,
+    })
+
+    with pytest.raises(IntegrityError):
+        update_product(db, actor, p.id, {"title": None})
+
+
+def test_a_duplicate_item_group_id_is_reported_as_its_own_conflict(db):
+    """I3: item_group_id is UNIQUE too (uq_products_item_group_id), and it is
+    the caller-supplied field most likely to collide after slug. Reporting it
+    as a slug conflict sends the operator to edit the wrong field."""
+    cat, actor = _level2_category(db), _actor(db)
+    create_product(db, actor, {
+        "title": "First", "slug": "i3-igid-a", "brand": "Pixi",
+        "category_id": cat.id, "item_group_id": "I3IGIDSHARED",
+    })
+
+    with pytest.raises(HTTPException) as exc:
+        create_product(db, actor, {
+            "title": "Second", "slug": "i3-igid-b", "brand": "Pixi",
+            "category_id": cat.id, "item_group_id": "I3IGIDSHARED",
+        })
+
+    assert exc.value.status_code == 409
+    assert "item group" in exc.value.detail.lower()
+
+
+def test_generating_variants_with_a_negative_price_is_rejected(db):
+    """B2: generate_variants validated the sale price against the price but
+    never the price itself, so a negative one reached
+    ck_variants_price_non_negative as an uncaught 500. update_variant already
+    refused it -- the two write paths must agree."""
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "b2-neg-price", "brand": "Pixi",
+        "category_id": cat.id,
+    })
+
+    with pytest.raises(HTTPException) as exc:
+        generate_variants(db, actor, p.id, ["38"], ["black"], {"price": "-1.00"})
+
+    assert exc.value.status_code == 400
+
+
+def test_generating_variants_with_negative_stock_is_rejected(db):
+    """B2: ck_variants_stock_non_negative, same reasoning as price."""
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "b2-neg-stock", "brand": "Pixi",
+        "category_id": cat.id,
+    })
+
+    with pytest.raises(HTTPException) as exc:
+        generate_variants(db, actor, p.id, ["38"], ["black"], {
+            "price": "500.00", "stock_quantity": -5,
+        })
+
+    assert exc.value.status_code == 400
+
+
+def test_updating_a_variant_to_negative_stock_is_rejected(db):
+    """B2: stock_quantity is in _EDITABLE_VARIANT_FIELDS and was set blindly,
+    so the edit path had the same gap the create path did."""
+    actor = _actor(db)
+    v = _variant(db, actor, "b2-var-stock")
+
+    with pytest.raises(HTTPException) as exc:
+        update_variant(db, actor, v.id, {"stock_quantity": -1})
+
+    assert exc.value.status_code == 400
+
+
+def test_generating_variants_refuses_a_sku_that_would_overflow_the_column(db):
+    """B2, one step past the specified fix: capping item_group_id at 64 stops
+    it overflowing its own column, but product_variants.sku is String(64) too
+    and additionally carries the size and the colour -- so a legal 64-character
+    group id still reaches the flush as a StringDataRightTruncation 500."""
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "b2-long-sku", "brand": "Pixi",
+        "category_id": cat.id, "item_group_id": "G" * 64,
+    })
+
+    with pytest.raises(HTTPException) as exc:
+        generate_variants(db, actor, p.id, ["38"], ["black"], {"price": "500.00"})
+
+    assert exc.value.status_code == 400
+    assert "item group id" in exc.value.detail.lower()

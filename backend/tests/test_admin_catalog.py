@@ -341,3 +341,107 @@ def test_admin_patch_variant_with_changed_sku_is_400(client, staff_token, e2e_cl
 
     assert r.status_code == 400, r.text
     assert "immutable" in r.json()["detail"].lower()
+
+
+# --- Whole-branch review fix B2: validation gaps that reached the DB --------
+#
+# condition/gender/age_group/status are SAEnum(native_enum=False) columns, so a
+# value outside the enum raises LookupError at bind time -- a 500 for what is
+# plainly a bad request. These prove the request is refused at the boundary,
+# before the repository or the database ever sees it.
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [("condition", "antique"), ("gender", "robot"), ("age_group", "ancient")],
+)
+def test_admin_create_product_rejects_a_value_outside_the_enum(
+    client, staff_token, e2e_cleanup, field, value
+):
+    token = staff_token("catalog")
+    # Hyphens, not the field name verbatim: "age_group" is not a legal slug
+    # (ck_products_slug_format), and a 400 for a malformed slug would mask
+    # whether the enum was refused at all.
+    slug = "b2-bad-" + field.replace("_", "-")
+    # Registered before the call, not after: if this validation regresses the
+    # row *is* written -- there is no CHECK behind the column -- and an
+    # unregistered row is residue the next run trips over.
+    e2e_cleanup.append(slug)
+    body = {
+        "title": "Bad Enum", "slug": slug, "brand": "Pixi",
+        "category_id": _any_level2_category_id(), field: value,
+    }
+
+    r = client.post(
+        "/api/admin/products",
+        headers={"Authorization": f"Bearer {token}"},
+        json=body,
+    )
+
+    assert r.status_code == 422, r.text
+
+
+def test_admin_create_product_rejects_an_overlong_item_group_id(
+    client, staff_token, e2e_cleanup
+):
+    """products.item_group_id is String(64), and the generated variant sku is
+    String(64) too -- a long item_group_id plus a long colour overflows it."""
+    token = staff_token("catalog")
+    e2e_cleanup.append("b2-long-group")
+
+    r = client.post(
+        "/api/admin/products",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "title": "Long Group", "slug": "b2-long-group", "brand": "Pixi",
+            "category_id": _any_level2_category_id(), "item_group_id": "G" * 65,
+        },
+    )
+
+    assert r.status_code == 422, r.text
+
+
+def test_admin_listing_rejects_a_status_outside_the_lifecycle(client, staff_token):
+    token = staff_token("catalog")
+
+    r = client.get(
+        "/api/admin/products?status=deleted",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert r.status_code == 422, r.text
+
+
+def test_admin_generate_variants_rejects_a_negative_price(client, staff_token):
+    """Refused by the request schema, so it never reaches the repository --
+    hence a product id that does not exist is still a 422, not a 404."""
+    token = staff_token("catalog")
+
+    r = client.post(
+        "/api/admin/products/999999999/variants",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"sizes": ["38"], "colors": ["black"], "price": "-1.00"},
+    )
+
+    assert r.status_code == 422, r.text
+
+
+def test_admin_patch_product_rejects_a_value_outside_the_enum(
+    client, staff_token, e2e_cleanup
+):
+    """The edit path writes these columns as blindly as the create path does,
+    so it needs the same boundary -- an unloadable product is an unloadable
+    product however it got that way."""
+    token = staff_token("catalog")
+    auth = {"Authorization": f"Bearer {token}"}
+    slug = "b2-patch-enum"
+    e2e_cleanup.append(slug)
+    product_id, _ = _create_product_with_variant(client, auth, slug)
+
+    r = client.patch(
+        f"/api/admin/products/{product_id}", headers=auth,
+        json={"condition": "antique"},
+    )
+
+    assert r.status_code == 422, r.text
+    assert client.get(f"/api/admin/products/{product_id}", headers=auth).status_code == 200

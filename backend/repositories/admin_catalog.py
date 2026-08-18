@@ -30,14 +30,37 @@ from models.product_images import ProductImage
 from models.product_translations import ProductTranslation
 from models.product_variants import ProductVariant
 from models.products import Product
-from repositories.admin_slugs import normalize_translation_slug, record_slug_change
+from repositories.admin_slugs import (
+    normalize_translation_slug,
+    record_slug_change,
+    release_live_path,
+)
 from services import cache
 from services.role_access_level import LEVEL_ADMIN, set_access_level
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
+# product_variants.sku is String(64). The SKU is built from item_group_id plus
+# the size and the colour, so a group id that fits its own String(64) column can
+# still overflow this one.
+_SKU_MAX_LENGTH = 64
+
 # ck_product_translations_published_requires_content
 _PUBLISHABLE_FIELDS = ("title", "description", "meta_description")
+
+
+def _missing_publishable_fields(tr) -> list[str]:
+    """Which fields ck_product_translations_published_requires_content still needs.
+
+    ONE implementation, called by both upsert_translation and publish_readiness.
+    They previously disagreed -- ``is None`` in one, falsiness in the other -- so
+    an empty or whitespace-only title published through upsert_translation while
+    publish_readiness would have refused it. The CHECK cannot close that gap on
+    its own: it is NULL-only, and "" IS NOT NULL. services/identity.py's
+    docstring records the same failure mode for customer identity: two
+    implementations of one rule that drifted apart.
+    """
+    return [f for f in _PUBLISHABLE_FIELDS if not (getattr(tr, f, None) or "").strip()]
 
 
 def list_products_for_admin(
@@ -125,6 +148,34 @@ def list_products_for_admin(
     }
 
 
+# The UNIQUE constraints a caller can actually collide with, and the sentence
+# that names the field they must change. Anything else -- a NOT NULL, a CHECK,
+# a foreign key -- is not a conflict and must never be reported as one.
+_UNIQUE_CONFLICTS = {
+    "uq_products_slug": "slug already in use",
+    "uq_products_item_group_id": "item group id already in use",
+}
+
+
+def _conflict(exc: IntegrityError) -> HTTPException:
+    """Turn a UNIQUE violation into a 409 that names the colliding field.
+
+    Both write paths previously answered "slug already in use" for *every*
+    IntegrityError, so ``PATCH {"title": null}`` -- a NOT NULL violation -- came
+    back as a slug collision the operator could not find anywhere. psycopg2
+    reports which constraint actually fired on ``exc.orig.diag``; an unmapped
+    one is re-raised rather than guessed at, because a wrong 409 costs more
+    than an honest 500. Both attributes are read defensively: ``orig`` is the
+    DBAPI error SQLAlchemy wrapped, and only psycopg2 guarantees ``diag``.
+    """
+    orig = getattr(exc, "orig", None)
+    diag = getattr(orig, "diag", None)
+    detail = _UNIQUE_CONFLICTS.get(getattr(diag, "constraint_name", None) or "")
+    if detail is None:
+        raise exc
+    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+
+
 def _generate_item_group_id(slug: str) -> str:
     """Merchant's variant-grouping key. Derived, never typed.
 
@@ -188,15 +239,13 @@ def create_product(db: Session, actor, payload: dict) -> Product:
     db.add(product)
     try:
         db.flush()
-    except IntegrityError:
+    except IntegrityError as exc:
         # The pre-check above handles the common case cheaply; this catches a
         # concurrent insert of the same slug that lands between the pre-check
         # and this flush (repositories/register.py has the same pattern for
-        # uq_users_email).
+        # uq_users_email) -- and item_group_id, which has no pre-check at all.
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="slug already in use"
-        )
+        raise _conflict(exc)
     return product
 
 
@@ -239,10 +288,16 @@ def upsert_translation(db: Session, actor, product_id: int, locale: str, payload
     elif is_new:
         tr.slug = normalize_translation_slug(payload.get("title") or product.slug)
 
-    if payload.get("is_published"):
+    # Whether the row *ends up* published, not whether this call asked to
+    # publish: emptying a field on an already-published translation reaches the
+    # same forbidden state, and gating on the payload alone missed it.
+    will_be_published = bool(
+        payload["is_published"] if "is_published" in payload else tr.is_published
+    )
+    if will_be_published:
         # ck_product_translations_published_requires_content would otherwise
         # turn this into an unhandled IntegrityError -> 500 at flush.
-        missing = [f for f in _PUBLISHABLE_FIELDS if getattr(tr, f, None) is None]
+        missing = _missing_publishable_fields(tr)
         if missing:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -255,13 +310,17 @@ def upsert_translation(db: Session, actor, product_id: int, locale: str, payload
     db.flush()
     db.refresh(tr)
 
-    # A draft has never been indexed, so a redirect from it would be noise.
     slug_changed = old_slug is not None and old_slug != tr.slug
-    if was_published and slug_changed:
-        record_slug_change(
-            db, locale=locale, old_slug=old_slug,
-            product_id=product_id, actor_id=actor.id,
-        )
+    if is_new or slug_changed:
+        # Whatever path this translation now occupies is live, so any redirect
+        # pointing away from it must stop firing first -- see release_live_path.
+        release_live_path(db, locale=locale, slug=tr.slug)
+        # A draft has never been indexed, so a redirect from it would be noise.
+        if was_published and slug_changed:
+            record_slug_change(
+                db, locale=locale, old_slug=old_slug,
+                product_id=product_id, actor_id=actor.id,
+            )
         db.flush()
 
     stale = [(locale, old_slug)] if slug_changed else None
@@ -370,13 +429,28 @@ def generate_variants(db, actor, product_id: int, sizes, colors, defaults: dict)
     if product is None:
         raise HTTPException(status_code=404, detail="product not found")
 
+    # The same money guards update_variant applies, for the same reason: these
+    # are CHECK constraints (ck_variants_price_non_negative,
+    # ck_variants_sale_price_valid, ck_variants_stock_non_negative), so without
+    # them a negative value surfaces as an unreadable 500 at flush. Both write
+    # paths have to refuse the same values or the edit screen and the create
+    # screen disagree about what a valid variant is.
     price = Decimal(str(defaults.get("price", "0")))
+    if price < 0:
+        raise HTTPException(status_code=400, detail="price cannot be negative")
+
     sale_price = defaults.get("sale_price")
     sale_price = Decimal(str(sale_price)) if sale_price is not None else None
+    if sale_price is not None and sale_price < 0:
+        raise HTTPException(status_code=400, detail="sale price cannot be negative")
     if sale_price is not None and sale_price > price:
         raise HTTPException(
             status_code=400, detail="sale price cannot exceed the price"
         )
+
+    stock_quantity = int(defaults.get("stock_quantity", 0))
+    if stock_quantity < 0:
+        raise HTTPException(status_code=400, detail="stock cannot be negative")
 
     material = defaults.get("material")
 
@@ -398,6 +472,18 @@ def generate_variants(db, actor, product_id: int, sizes, colors, defaults: dict)
                 continue
             candidate = _variant_sku(product.item_group_id, size, color)
             sku = _unique_sku(db, candidate, taken_skus)
+            if len(sku) > _SKU_MAX_LENGTH:
+                # Checked after disambiguation, because the "-2" suffix
+                # _unique_sku may add counts against the same 64 characters.
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "item group id is too long to generate SKUs from — "
+                        f"'{size} / {color}' would need "
+                        f"{len(sku)} characters and the column allows "
+                        f"{_SKU_MAX_LENGTH}"
+                    ),
+                )
             taken_skus.add(sku)
             variant = ProductVariant(
                 product_id=product_id,
@@ -413,7 +499,7 @@ def generate_variants(db, actor, product_id: int, sizes, colors, defaults: dict)
                 currency="EGP",
                 cost=None,  # COGS is admin-gated; set on the variant edit screen
                 availability=defaults.get("availability", "in_stock"),
-                stock_quantity=int(defaults.get("stock_quantity", 0)),
+                stock_quantity=stock_quantity,
                 merchant_eligible=True,
                 is_active=True,
             )
@@ -528,15 +614,13 @@ def update_product(db, actor, product_id: int, payload: dict):
 
     try:
         db.flush()
-    except IntegrityError:
+    except IntegrityError as exc:
         # The pre-check above handles the common case cheaply; this catches a
         # concurrent rename to the same slug landing between the pre-check and
         # this flush -- create_product has the identical pattern, for the
         # identical reason (uq_products_slug is not enforceable by a SELECT).
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="slug already in use"
-        )
+        raise _conflict(exc)
     _invalidate(db, product_id)
     return product
 
@@ -668,6 +752,17 @@ def update_variant(db, actor, variant_id: int, payload: dict):
             detail="sale price cannot exceed the price",
         )
 
+    stock = payload.get("stock_quantity")
+    if stock is not None and int(stock) < 0:
+        # ck_variants_stock_non_negative. stock_quantity is set blindly with the
+        # rest of _EDITABLE_VARIANT_FIELDS below, so this is the only place it
+        # can be refused before the flush. An explicit null is left to the
+        # column's own NOT NULL to reject, as it is for every other field here.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="stock cannot be negative",
+        )
+
     variant.price = price
     variant.sale_price = sale_price
 
@@ -749,7 +844,7 @@ def publish_readiness(db: Session, product_id: int, locale: str) -> list[dict]:
             "message": f"No {locale} content exists yet.",
         })
     else:
-        missing = [f for f in _PUBLISHABLE_FIELDS if not getattr(tr, f, None)]
+        missing = _missing_publishable_fields(tr)
         if missing:
             blockers.append({
                 "code": "incomplete_translation",

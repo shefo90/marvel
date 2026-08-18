@@ -1,8 +1,17 @@
-"""Admin catalog contracts. No logic here — see repositories/admin_catalog.py."""
+"""Admin catalog contracts. No logic here — see repositories/admin_catalog.py.
+
+The enum-typed fields are typed against ``core.enums`` rather than ``str``
+deliberately. Those columns are ``SAEnum(native_enum=False)`` with no CHECK
+behind them, so an unknown value is *written* happily and then raises
+LookupError on every subsequent read of the row — the product becomes
+unloadable. Rejecting it at the boundary is the only place that costs nothing.
+"""
 
 from decimal import Decimal
 
 from pydantic import BaseModel, Field
+
+from core.enums import AgeGroup, Gender, ProductCondition
 
 
 class translation_state(BaseModel):
@@ -38,10 +47,12 @@ class admin_product_create(BaseModel):
     category_id: int
     description: str | None = None
     tags: list[str] = []
-    condition: str = "new"
-    gender: str | None = None
-    age_group: str | None = None
-    item_group_id: str | None = None
+    condition: ProductCondition = ProductCondition.new
+    gender: Gender | None = None
+    age_group: AgeGroup | None = None
+    # products.item_group_id is String(64), and the SKU generated from it is
+    # String(64) as well -- a long group id plus a long colour overflows the SKU.
+    item_group_id: str | None = Field(default=None, max_length=64)
 
 
 class admin_product_detail(BaseModel):
@@ -80,9 +91,9 @@ class admin_translation_detail(BaseModel):
 class admin_variant_matrix(BaseModel):
     sizes: list[str] = Field(min_length=1)
     colors: list[str] = Field(min_length=1)
-    price: Decimal
-    sale_price: Decimal | None = None
-    stock_quantity: int = 0
+    price: Decimal = Field(ge=0)
+    sale_price: Decimal | None = Field(default=None, ge=0)
+    stock_quantity: int = Field(default=0, ge=0)
     availability: str = "in_stock"
     size_system: str | None = None
     material: str | None = None
@@ -112,9 +123,9 @@ class admin_product_update(BaseModel):
     category_id: int | None = None
     description: str | None = None
     tags: list[str] | None = None
-    condition: str | None = None
-    gender: str | None = None
-    age_group: str | None = None
+    condition: ProductCondition | None = None
+    gender: Gender | None = None
+    age_group: AgeGroup | None = None
 
 
 class admin_variant_update(BaseModel):
