@@ -117,6 +117,22 @@ class admin_product_update(BaseModel):
     age_group: str | None = None
 
 
+class admin_variant_update(BaseModel):
+    variant_title: str | None = None
+    price: Decimal | None = None
+    sale_price: Decimal | None = None
+    cost: Decimal | None = None
+    stock_quantity: int | None = None
+    availability: str | None = None
+    gtin: str | None = None
+    mpn: str | None = None
+    material: str | None = None
+    size_system: str | None = None
+    weight_grams: int | None = None
+    merchant_eligible: bool | None = None
+    is_active: bool | None = None
+
+
 class admin_product_full(BaseModel):
     id: int
     item_group_id: str

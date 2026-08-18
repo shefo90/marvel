@@ -32,6 +32,7 @@ from models.product_variants import ProductVariant
 from models.products import Product
 from repositories.admin_slugs import normalize_translation_slug, record_slug_change
 from services import cache
+from services.role_access_level import LEVEL_ADMIN, set_access_level
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
@@ -553,6 +554,108 @@ def archive_product(db, actor, product_id: int):
     return product
 
 
+_EDITABLE_VARIANT_FIELDS = (
+    "variant_title", "gtin", "mpn", "material", "size_system",
+    "availability", "stock_quantity", "weight_grams",
+    "length_cm", "width_cm", "height_cm", "merchant_eligible", "is_active",
+)
+
+
+def update_variant(db, actor, variant_id: int, payload: dict):
+    """Edit a variant. SKU is refused; COGS requires an admin.
+
+    Controller ruling (cross-task correction): making ``is_active`` editable
+    exposes a bug that was latent while nothing could deactivate a variant --
+    publish_readiness's ``no_default_variant`` check only tested
+    ``default_variant_id IS NOT NULL``, never whether that variant was still
+    active. Deactivating a product's default variant is therefore reassigned
+    to another active variant here, mirroring how publish_product already
+    self-heals a cleared default_variant_id from the first active variant --
+    the same self-healing idiom, just triggered from the other direction.
+    Refused with 409 only when no other active variant remains, since setting
+    default_variant_id to NULL on a product that may already be
+    status='active' would violate ck_products_active_has_default_variant.
+    """
+    variant = db.get(ProductVariant, variant_id)
+    if variant is None:
+        raise HTTPException(status_code=404, detail="variant not found")
+
+    if "sku" in payload and payload["sku"] != variant.sku:
+        # trg_variants_sku_immutable would raise a restrict_violation. Refusing
+        # here gives the operator a sentence instead of a database error.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SKU is immutable — Merchant Center and the Meta catalog key on it",
+        )
+
+    replacement_id = None
+    deactivating = (
+        "is_active" in payload and not payload["is_active"] and variant.is_active
+    )
+    if deactivating:
+        product = db.get(Product, variant.product_id)
+        if product is not None and product.default_variant_id == variant.id:
+            replacement_id = db.execute(
+                select(ProductVariant.id)
+                .where(
+                    ProductVariant.product_id == variant.product_id,
+                    ProductVariant.id != variant.id,
+                    ProductVariant.is_active.is_(True),
+                )
+                .order_by(ProductVariant.id)
+            ).scalars().first()
+            if replacement_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "cannot deactivate the only active variant while it is "
+                        "the product's default — activate or add another "
+                        "variant first"
+                    ),
+                )
+
+    if "cost" in payload:
+        # COGS feeds order_items.unit_cogs and therefore contribution_profit.
+        # It is a money field, not a catalog field: catalog (2) may set price
+        # and stock, but only admin (4) may set cost. The route stays gated at
+        # LEVEL_CATALOG -- whether admin is required depends on which field
+        # was sent, not on the endpoint.
+        if set_access_level(actor) < LEVEL_ADMIN:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="COGS may only be set by an admin",
+            )
+        cost = payload["cost"]
+        variant.cost = Decimal(str(cost)) if cost is not None else None
+
+    price = Decimal(str(payload["price"])) if "price" in payload else variant.price
+    if "sale_price" in payload:
+        sale_price = payload["sale_price"]
+        sale_price = Decimal(str(sale_price)) if sale_price is not None else None
+    else:
+        sale_price = variant.sale_price
+
+    if sale_price is not None and sale_price > price:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="sale price cannot exceed the price",
+        )
+
+    variant.price = price
+    variant.sale_price = sale_price
+
+    for field in _EDITABLE_VARIANT_FIELDS:
+        if field in payload:
+            setattr(variant, field, payload[field])
+
+    if replacement_id is not None:
+        product.default_variant_id = replacement_id
+
+    db.flush()
+    _invalidate(db, variant.product_id)
+    return variant
+
+
 def publish_readiness(db: Session, product_id: int, locale: str) -> list[dict]:
     """What still blocks this language from publishing, as data.
 
@@ -581,17 +684,30 @@ def publish_readiness(db: Session, product_id: int, locale: str) -> list[dict]:
         })
     else:
         product = db.get(Product, product_id)
-        if product is not None and product.default_variant_id is None:
+        if product is not None:
             # ck_products_active_has_default_variant forbids status='active'
-            # while default_variant_id is NULL. publish_product backfills this
-            # itself before it ever reaches this check, so the normal path
-            # self-heals -- this is here so a standalone readiness check still
-            # reports the true state (e.g. right after the chosen default
-            # variant was deactivated).
-            blockers.append({
-                "code": "no_default_variant",
-                "message": "Set a default variant before publishing.",
-            })
+            # while default_variant_id is NULL -- but a non-NULL id pointing at
+            # a deactivated variant satisfies that CHECK while still leaving
+            # the storefront with no sellable default, so IS NOT NULL alone is
+            # not "ready". publish_product backfills a NULL id from the first
+            # active variant before it ever reaches this check, and
+            # update_variant refuses to deactivate a default without another
+            # active variant to reassign to -- but this is re-derived from the
+            # rows rather than trusted from either caller, so a standalone
+            # readiness check still reports the true state regardless of how
+            # default_variant_id got here.
+            default_id = product.default_variant_id
+            default_is_active = default_id is not None and db.execute(
+                select(ProductVariant.id).where(
+                    ProductVariant.id == default_id,
+                    ProductVariant.is_active.is_(True),
+                )
+            ).first() is not None
+            if not default_is_active:
+                blockers.append({
+                    "code": "no_default_variant",
+                    "message": "Set a default variant before publishing.",
+                })
 
     tr = db.execute(
         select(ProductTranslation).where(

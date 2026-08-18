@@ -1,6 +1,7 @@
 """Repository-level admin catalog writes, on the rolled-back session."""
 
 import re
+from decimal import Decimal
 
 import pytest
 from fastapi import HTTPException
@@ -20,6 +21,7 @@ from repositories.admin_catalog import (
     publish_product,
     publish_readiness,
     update_product,
+    update_variant,
     upsert_translation,
 )
 from services import cache
@@ -665,3 +667,131 @@ def test_archiving_unpublishes_every_language(db):
         select(ProductTranslation).where(ProductTranslation.product_id == p.id)
     ).scalar_one()
     assert tr.is_published is False
+
+
+def _variant(db, actor, slug: str):
+    cat = _level2_category(db)
+    p = create_product(db, actor, {
+        "title": "V", "slug": slug, "brand": "Pixi", "category_id": cat.id,
+    })
+    return generate_variants(db, actor, p.id, ["38"], ["black"], {"price": "500.00"})[0]
+
+
+def test_catalog_role_can_change_price_and_stock(db):
+    actor = _actor(db)
+    v = _variant(db, actor, "var-1")
+
+    updated = update_variant(db, actor, v.id, {"price": "450.00", "stock_quantity": 9})
+
+    assert updated.price == Decimal("450.00")
+    assert updated.stock_quantity == 9
+
+
+def test_catalog_role_cannot_set_cogs(db):
+    actor = _actor(db)             # role="catalog"
+    v = _variant(db, actor, "var-2")
+
+    with pytest.raises(HTTPException) as exc:
+        update_variant(db, actor, v.id, {"cost": "200.00"})
+
+    assert exc.value.status_code == 403
+
+
+def test_admin_role_can_set_cogs(db):
+    admin = User(
+        email="cogs-admin@example.com", password_hash="x",
+        full_name="Admin", role="admin", is_active=True,
+    )
+    db.add(admin)
+    db.flush()
+    v = _variant(db, admin, "var-3")
+
+    updated = update_variant(db, admin, v.id, {"cost": "200.00"})
+
+    assert updated.cost == Decimal("200.00")
+
+
+def test_sale_price_above_price_is_rejected_on_update(db):
+    actor = _actor(db)
+    v = _variant(db, actor, "var-4")
+
+    with pytest.raises(HTTPException) as exc:
+        update_variant(db, actor, v.id, {"sale_price": "900.00"})
+
+    assert exc.value.status_code == 400
+
+
+def test_sku_cannot_be_changed(db):
+    """trg_variants_sku_immutable enforces it; the API refuses before it fires."""
+    actor = _actor(db)
+    v = _variant(db, actor, "var-5")
+
+    with pytest.raises(HTTPException) as exc:
+        update_variant(db, actor, v.id, {"sku": "REWRITTEN-1"})
+
+    assert exc.value.status_code == 400
+    assert "immutable" in exc.value.detail.lower()
+
+
+def test_deactivating_the_default_variant_reassigns_another_active_one(db):
+    """Controller ruling (cross-task correction): is_active becoming editable
+    makes a previously-latent bug live. publish_readiness only checked
+    default_variant_id IS NOT NULL, never whether that variant was still
+    active -- until now nothing could deactivate a variant, so an active
+    product could never end up pointing at a disabled default. Reassigning to
+    another active variant (mirroring publish_product's own self-heal of a
+    cleared default_variant_id) keeps a deactivation from silently leaving the
+    product's default disabled while readiness still says "ready"."""
+    actor = _actor(db)
+    cat = _level2_category(db)
+    p = create_product(db, actor, {
+        "title": "V", "slug": "var-default-1", "brand": "Pixi", "category_id": cat.id,
+    })
+    variants = generate_variants(
+        db, actor, p.id, ["38", "39"], ["black"], {"price": "500.00"}
+    )
+    db.refresh(p)
+    default_id = p.default_variant_id
+    assert default_id == variants[0].id
+
+    update_variant(db, actor, default_id, {"is_active": False})
+
+    db.refresh(p)
+    assert p.default_variant_id != default_id
+    assert p.default_variant_id == variants[1].id
+
+
+def test_deactivating_the_only_active_variant_that_is_default_is_rejected(db):
+    """No active variant remains to reassign to, and nulling default_variant_id
+    on an active(-eligible) product would violate
+    ck_products_active_has_default_variant -- refuse instead."""
+    actor = _actor(db)
+    v = _variant(db, actor, "var-default-2")
+
+    with pytest.raises(HTTPException) as exc:
+        update_variant(db, actor, v.id, {"is_active": False})
+
+    assert exc.value.status_code == 409
+
+
+def test_readiness_reports_no_default_variant_when_it_is_inactive(db):
+    """Tightens publish_readiness itself (not just update_variant's guard): the
+    referenced default variant must still be active, not merely non-NULL, or
+    a product whose default was deactivated by some other path keeps reporting
+    "ready" to publish."""
+    _locale(db, "ar")
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "pub-8", "brand": "Pixi", "category_id": cat.id,
+    })
+    variants = generate_variants(
+        db, actor, p.id, ["38", "39"], ["black"], {"price": "500.00"}
+    )
+    db.refresh(p)
+    assert p.default_variant_id == variants[0].id
+    variants[0].is_active = False
+    db.flush()
+
+    codes = {b["code"] for b in publish_readiness(db, p.id, "ar")}
+
+    assert "no_default_variant" in codes

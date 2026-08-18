@@ -15,7 +15,7 @@ behind them.
 
 | Slice | State |
 |---|---|
-| **S1 — commerce core** | Done. 46 tables, 4 migrations, catalog + auth + cart + idempotent orders, 51 tests |
+| **S1 — commerce core** | Done. 46 tables, 4 migrations, catalog + auth + cart + idempotent orders, 116 tests |
 | **S1b — promotions** | Not started. Needed for BOGO / tiered discounts before storefront parity |
 | **S2 — storefront & SEO** | Not started. Rendering decided: React SSR on Vite via Vike |
 | **S3–S7** | Not started |

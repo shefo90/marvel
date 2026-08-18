@@ -24,6 +24,7 @@ from repositories.admin_catalog import (
     publish_product,
     publish_readiness,
     update_product,
+    update_variant,
     upsert_translation,
 )
 from routes.admin_deps import staff_at_least
@@ -38,6 +39,7 @@ from schema.admin_catalog import (
     admin_translation_upsert,
     admin_variant_matrix,
     admin_variant_row,
+    admin_variant_update,
 )
 from services.role_access_level import LEVEL_CATALOG
 
@@ -161,6 +163,22 @@ def admin_archive_product(
     db.commit()
     db.refresh(product)
     return product
+
+
+@router.patch("/variants/{variant_id}", response_model=admin_variant_row)
+def admin_update_variant(
+    variant_id: int,
+    payload: admin_variant_update,
+    actor: User = Depends(staff_at_least(LEVEL_CATALOG)),
+    db: Session = Depends(get_db),
+):
+    """Edit one variant. Setting `cost` additionally requires an admin."""
+    variant = update_variant(
+        db, actor, variant_id, payload.model_dump(exclude_unset=True)
+    )
+    db.commit()
+    db.refresh(variant)
+    return variant
 
 
 @router.get("/products/{product_id}/readiness", response_model=list[admin_blocker])
