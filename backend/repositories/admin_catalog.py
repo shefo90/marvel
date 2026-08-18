@@ -236,6 +236,16 @@ def upsert_translation(db: Session, actor, product_id: int, locale: str, payload
     elif is_new:
         tr.slug = normalize_translation_slug(payload.get("title") or product.slug)
 
+    if payload.get("is_published"):
+        # ck_product_translations_published_requires_content would otherwise
+        # turn this into an unhandled IntegrityError -> 500 at flush.
+        missing = [f for f in _PUBLISHABLE_FIELDS if getattr(tr, f, None) is None]
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"cannot publish: missing {', '.join(missing)}",
+            )
+
     if "is_published" in payload:
         tr.is_published = bool(payload["is_published"])
 
@@ -243,23 +253,30 @@ def upsert_translation(db: Session, actor, product_id: int, locale: str, payload
     db.refresh(tr)
 
     # A draft has never been indexed, so a redirect from it would be noise.
-    if was_published and old_slug and old_slug != tr.slug:
+    slug_changed = old_slug is not None and old_slug != tr.slug
+    if was_published and slug_changed:
         record_slug_change(
             db, locale=locale, old_slug=old_slug,
             product_id=product_id, actor_id=actor.id,
         )
         db.flush()
 
-    _invalidate(db, product_id)
+    stale = [(locale, old_slug)] if slug_changed else None
+    _invalidate(db, product_id, stale)
     return tr
 
 
-def _invalidate(db: Session, product_id: int) -> None:
+def _invalidate(
+    db: Session, product_id: int, stale: list[tuple[str, str]] | None = None
+) -> None:
     """Drop every cached copy of this product, in every locale it has.
 
     invalidate_product's docstring is explicit that a missing locale leaves that
     locale serving stale content, so the map is read from the rows rather than
-    assumed.
+    assumed. ``stale`` carries (locale, slug) pairs that are no longer on any
+    row — a slug a caller just renamed away from — so the entry cached under
+    the retired slug (``repositories.product.get_product_by_slug`` keys on it)
+    is dropped immediately instead of waiting out its TTL.
     """
     slugs = {
         loc: slug
@@ -270,3 +287,5 @@ def _invalidate(db: Session, product_id: int) -> None:
         ).all()
     }
     cache.invalidate_product(product_id, slugs)
+    if stale:
+        cache.delete(*(cache.key(cache.NS_PRODUCT, loc, slug) for loc, slug in stale))
