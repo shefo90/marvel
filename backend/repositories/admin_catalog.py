@@ -526,7 +526,17 @@ def update_product(db, actor, product_id: int, payload: dict):
         if field in payload:
             setattr(product, field, payload[field])
 
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # The pre-check above handles the common case cheaply; this catches a
+        # concurrent rename to the same slug landing between the pre-check and
+        # this flush -- create_product has the identical pattern, for the
+        # identical reason (uq_products_slug is not enforceable by a SELECT).
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="slug already in use"
+        )
     _invalidate(db, product_id)
     return product
 
@@ -580,9 +590,12 @@ def update_variant(db, actor, variant_id: int, payload: dict):
     if variant is None:
         raise HTTPException(status_code=404, detail="variant not found")
 
-    if "sku" in payload and payload["sku"] != variant.sku:
+    if "sku" in payload and payload["sku"] is not None and payload["sku"] != variant.sku:
         # trg_variants_sku_immutable would raise a restrict_violation. Refusing
-        # here gives the operator a sentence instead of a database error.
+        # here gives the operator a sentence instead of a database error. An
+        # explicit ``null`` is not a request to change anything -- sku is
+        # NOT NULL, so "clear it" cannot be what the caller meant -- so it is
+        # read the same as the field being absent, not as a rejected change.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="SKU is immutable — Merchant Center and the Meta catalog key on it",
@@ -626,9 +639,23 @@ def update_variant(db, actor, variant_id: int, payload: dict):
                 detail="COGS may only be set by an admin",
             )
         cost = payload["cost"]
-        variant.cost = Decimal(str(cost)) if cost is not None else None
+        cost = Decimal(str(cost)) if cost is not None else None
+        if cost is not None and cost < 0:
+            # ck_variants_cost_non_negative would otherwise surface this as a
+            # raw 500 at flush.
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="cost cannot be negative",
+            )
+        variant.cost = cost
 
     price = Decimal(str(payload["price"])) if "price" in payload else variant.price
+    if price < 0:
+        # ck_variants_price_non_negative, same reasoning as cost above.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="price cannot be negative",
+        )
     if "sale_price" in payload:
         sale_price = payload["sale_price"]
         sale_price = Decimal(str(sale_price)) if sale_price is not None else None

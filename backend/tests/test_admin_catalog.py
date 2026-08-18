@@ -209,3 +209,135 @@ def test_operator_can_take_a_product_from_nothing_to_published(client, staff_tok
     )
     assert published.status_code == 200
     assert published.json()["is_published"] is True
+
+
+# --- Tasks 8-10 review fixes: HTTP-level coverage (I3) ----------------------
+#
+# Every Task 8-10 test up to here calls the repository functions directly, so
+# the response models, the route gating, and the Pydantic request boundary
+# were all unverified -- which is exactly how I2 (an sku field missing from
+# admin_variant_update, silently swallowing an attempted SKU change) slipped
+# through. These go over real HTTP with a real staff login instead.
+
+
+def _create_product_with_variant(client, auth: dict, slug: str) -> tuple[int, int]:
+    created = client.post("/api/admin/products", headers=auth, json={
+        "title": "HTTP Sandal", "slug": slug, "brand": "Pixi",
+        "category_id": _any_level2_category_id(),
+    })
+    assert created.status_code == 201, created.text
+    product_id = created.json()["id"]
+
+    variants = client.post(
+        f"/api/admin/products/{product_id}/variants", headers=auth,
+        json={"sizes": ["38"], "colors": ["black"], "price": "500.00"},
+    )
+    assert variants.status_code == 201, variants.text
+    return product_id, variants.json()[0]["id"]
+
+
+def test_admin_get_product_returns_translations_and_variants(client, staff_token, e2e_cleanup):
+    token = staff_token("catalog")
+    auth = {"Authorization": f"Bearer {token}"}
+    slug = "http-load-1"
+    product_id, _ = _create_product_with_variant(client, auth, slug)
+    e2e_cleanup.append(slug)
+
+    client.put(
+        f"/api/admin/products/{product_id}/translations/ar", headers=auth,
+        json={"title": "صندل"},
+    )
+
+    r = client.get(f"/api/admin/products/{product_id}", headers=auth)
+
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["id"] == product_id
+    assert len(body["variants"]) == 1
+    assert {t["locale"] for t in body["translations"]} == {"ar"}
+
+
+def test_admin_patch_product_edits_a_base_field(client, staff_token, e2e_cleanup):
+    token = staff_token("catalog")
+    auth = {"Authorization": f"Bearer {token}"}
+    slug = "http-edit-1"
+    product_id, _ = _create_product_with_variant(client, auth, slug)
+    e2e_cleanup.append(slug)
+
+    r = client.patch(
+        f"/api/admin/products/{product_id}", headers=auth, json={"title": "New Title"},
+    )
+
+    assert r.status_code == 200, r.text
+    assert r.json()["title"] == "New Title"
+
+
+def test_admin_archive_product(client, staff_token, e2e_cleanup):
+    token = staff_token("catalog")
+    auth = {"Authorization": f"Bearer {token}"}
+    slug = "http-archive-1"
+    product_id, _ = _create_product_with_variant(client, auth, slug)
+    e2e_cleanup.append(slug)
+
+    r = client.post(f"/api/admin/products/{product_id}/archive", headers=auth)
+
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "archived"
+
+
+def test_admin_patch_variant_changes_price_as_catalog_role(client, staff_token, e2e_cleanup):
+    token = staff_token("catalog")
+    auth = {"Authorization": f"Bearer {token}"}
+    slug = "http-variant-1"
+    _, variant_id = _create_product_with_variant(client, auth, slug)
+    e2e_cleanup.append(slug)
+
+    r = client.patch(
+        f"/api/admin/variants/{variant_id}", headers=auth, json={"price": "425.00"},
+    )
+
+    assert r.status_code == 200, r.text
+    from decimal import Decimal
+    assert Decimal(str(r.json()["price"])) == Decimal("425.00")
+
+
+def test_admin_patch_variant_cost_requires_admin(client, staff_token, e2e_cleanup):
+    catalog_token = staff_token("catalog")
+    catalog_auth = {"Authorization": f"Bearer {catalog_token}"}
+    slug = "http-variant-2"
+    _, variant_id = _create_product_with_variant(client, catalog_auth, slug)
+    e2e_cleanup.append(slug)
+
+    forbidden = client.patch(
+        f"/api/admin/variants/{variant_id}", headers=catalog_auth,
+        json={"cost": "200.00"},
+    )
+    assert forbidden.status_code == 403
+
+    admin_token = staff_token("admin")
+    admin_auth = {"Authorization": f"Bearer {admin_token}"}
+    allowed = client.patch(
+        f"/api/admin/variants/{variant_id}", headers=admin_auth, json={"cost": "200.00"},
+    )
+    assert allowed.status_code == 200, allowed.text
+
+
+def test_admin_patch_variant_with_changed_sku_is_400(client, staff_token, e2e_cleanup):
+    """I2: admin_variant_update previously had no sku field, so Pydantic
+    silently dropped a "sku" key from the request body before the
+    repository's refusal could ever fire -- a caller changing sku got 200 OK
+    and a no-op. This is the HTTP-level proof the field now survives to the
+    repository and the 400 actually fires."""
+    token = staff_token("catalog")
+    auth = {"Authorization": f"Bearer {token}"}
+    slug = "http-variant-3"
+    _, variant_id = _create_product_with_variant(client, auth, slug)
+    e2e_cleanup.append(slug)
+
+    r = client.patch(
+        f"/api/admin/variants/{variant_id}", headers=auth,
+        json={"sku": "REWRITTEN-HTTP-1"},
+    )
+
+    assert r.status_code == 400, r.text
+    assert "immutable" in r.json()["detail"].lower()

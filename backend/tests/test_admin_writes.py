@@ -795,3 +795,113 @@ def test_readiness_reports_no_default_variant_when_it_is_inactive(db):
     codes = {b["code"] for b in publish_readiness(db, p.id, "ar")}
 
     assert "no_default_variant" in codes
+
+
+# --- Review fixes (I1, I2, I3, minors) --------------------------------------
+
+
+def test_updating_to_a_colliding_slug_raises_409_not_500_on_the_race(db, monkeypatch):
+    """I1: update_product had a pre-check but no catch around the flush --
+    create_product already fixed exactly this race (commit 0b380e5, F1): pre-
+    check, then a concurrent rename landing between the check and the flush
+    surfaces as an unhandled IntegrityError -> 500 instead of 409. Simulated
+    here without real concurrency by making the pre-check's own query report
+    "nothing taken" on its first call, even though the colliding slug already
+    exists -- exactly what a same-slug rename racing in on another connection
+    would look like from inside this flush."""
+    cat, actor = _level2_category(db), _actor(db)
+    create_product(db, actor, {
+        "title": "Taken", "slug": "race-taken", "brand": "Pixi", "category_id": cat.id,
+    })
+    p = create_product(db, actor, {
+        "title": "Mover", "slug": "race-mover", "brand": "Pixi", "category_id": cat.id,
+    })
+
+    real_execute = db.execute
+    calls = {"n": 0}
+
+    def _fake_execute(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            class _EmptyResult:
+                def first(self_inner):
+                    return None
+            return _EmptyResult()
+        return real_execute(*args, **kwargs)
+
+    monkeypatch.setattr(db, "execute", _fake_execute)
+
+    with pytest.raises(HTTPException) as exc:
+        update_product(db, actor, p.id, {"slug": "race-taken"})
+
+    assert exc.value.status_code == 409
+
+
+def test_resending_the_same_sku_is_a_noop(db):
+    actor = _actor(db)
+    v = _variant(db, actor, "var-6")
+
+    updated = update_variant(db, actor, v.id, {"sku": v.sku, "price": "460.00"})
+
+    assert updated.sku == v.sku
+    assert updated.price == Decimal("460.00")
+
+
+def test_sku_null_is_not_treated_as_a_change(db):
+    """I2: admin_variant_update now carries an sku field, so an explicit
+    ``"sku": null`` reaches the repository instead of being dropped by
+    Pydantic. NULL must not be read as "change the SKU to nothing" -- the
+    column is NOT NULL and immutable -- just as "no SKU change requested"."""
+    actor = _actor(db)
+    v = _variant(db, actor, "var-7")
+
+    updated = update_variant(db, actor, v.id, {"sku": None, "price": "470.00"})
+
+    assert updated.sku == v.sku
+    assert updated.price == Decimal("470.00")
+
+
+def test_negative_price_is_rejected(db):
+    """Minor: ck_variants_price_non_negative would otherwise surface a
+    negative price as a raw 500 at flush."""
+    actor = _actor(db)
+    v = _variant(db, actor, "var-8")
+
+    with pytest.raises(HTTPException) as exc:
+        update_variant(db, actor, v.id, {"price": "-1.00"})
+
+    assert exc.value.status_code == 400
+
+
+def test_negative_cost_is_rejected_for_an_admin(db):
+    """Minor: ck_variants_cost_non_negative, same reasoning as price."""
+    admin = User(
+        email="cogs-admin-2@example.com", password_hash="x",
+        full_name="Admin", role="admin", is_active=True,
+    )
+    db.add(admin)
+    db.flush()
+    v = _variant(db, admin, "var-9")
+
+    with pytest.raises(HTTPException) as exc:
+        update_variant(db, admin, v.id, {"cost": "-1.00"})
+
+    assert exc.value.status_code == 400
+
+
+def test_shipping_dimensions_are_editable(db):
+    """Minor: length_cm/width_cm/height_cm are in _EDITABLE_VARIANT_FIELDS but
+    were absent from admin_variant_update -- dead capability at the schema
+    layer. The repository has always accepted them (given properly-typed
+    values, as Pydantic would produce); this pins that down directly."""
+    actor = _actor(db)
+    v = _variant(db, actor, "var-10")
+
+    updated = update_variant(db, actor, v.id, {
+        "length_cm": Decimal("12.50"), "width_cm": Decimal("8.00"),
+        "height_cm": Decimal("5.25"),
+    })
+
+    assert updated.length_cm == Decimal("12.50")
+    assert updated.width_cm == Decimal("8.00")
+    assert updated.height_cm == Decimal("5.25")

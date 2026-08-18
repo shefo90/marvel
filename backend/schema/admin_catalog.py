@@ -118,6 +118,10 @@ class admin_product_update(BaseModel):
 
 
 class admin_variant_update(BaseModel):
+    # sku is here so the repository's refusal actually fires -- without this
+    # field Pydantic silently drops an "sku" key before update_variant ever
+    # sees it, so a caller attempting to change it got 200 OK and a no-op.
+    sku: str | None = None
     variant_title: str | None = None
     price: Decimal | None = None
     sale_price: Decimal | None = None
@@ -129,6 +133,9 @@ class admin_variant_update(BaseModel):
     material: str | None = None
     size_system: str | None = None
     weight_grams: int | None = None
+    length_cm: Decimal | None = None
+    width_cm: Decimal | None = None
+    height_cm: Decimal | None = None
     merchant_eligible: bool | None = None
     is_active: bool | None = None
 
