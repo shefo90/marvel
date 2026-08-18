@@ -18,6 +18,7 @@ from models.users import User
 from repositories.admin_catalog import (
     create_product,
     generate_variants,
+    get_product_for_admin,
     list_products_for_admin,
     publish_product,
     publish_readiness,
@@ -28,6 +29,7 @@ from schema.admin_catalog import (
     admin_blocker,
     admin_product_create,
     admin_product_detail,
+    admin_product_full,
     admin_product_list_response,
     admin_translation_detail,
     admin_translation_upsert,
@@ -117,6 +119,16 @@ def admin_generate_variants(
     for v in created:
         db.refresh(v)
     return created
+
+
+@router.get("/products/{product_id}", response_model=admin_product_full)
+def admin_get_product(
+    product_id: int,
+    actor: User = Depends(staff_at_least(LEVEL_CATALOG)),
+    db: Session = Depends(get_db),
+):
+    """Load a product for editing, drafts and unpublished languages included."""
+    return get_product_for_admin(db, product_id)
 
 
 @router.get("/products/{product_id}/readiness", response_model=list[admin_blocker])

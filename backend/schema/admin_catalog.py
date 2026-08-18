@@ -103,3 +103,15 @@ class admin_variant_row(BaseModel):
     sale_price: Decimal | None
     stock_quantity: int
     is_active: bool
+
+
+class admin_product_full(BaseModel):
+    id: int
+    item_group_id: str
+    slug: str
+    title: str
+    brand: str
+    status: str
+    category_id: int
+    translations: list[admin_translation_detail]
+    variants: list[admin_variant_row]

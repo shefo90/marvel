@@ -14,6 +14,7 @@ from models.users import User
 from repositories.admin_catalog import (
     create_product,
     generate_variants,
+    get_product_for_admin,
     publish_product,
     publish_readiness,
     upsert_translation,
@@ -569,3 +570,37 @@ def test_publish_backfills_a_cleared_default_variant(db):
     assert p.default_variant_id == variants[0].id
     assert p.status == "active"
     assert tr.is_published is True
+
+
+def test_editor_load_returns_every_locale_including_unpublished(db):
+    _locale(db, "ar")
+    _locale(db, "en")
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "load-1", "brand": "Pixi", "category_id": cat.id,
+    })
+    upsert_translation(db, actor, p.id, "ar", {"title": "صندل"})
+    upsert_translation(db, actor, p.id, "en", {"title": "Sandal"})
+
+    loaded = get_product_for_admin(db, p.id)
+
+    assert {t["locale"] for t in loaded["translations"]} == {"ar", "en"}
+    assert all(t["is_published"] is False for t in loaded["translations"])
+
+
+def test_editor_load_includes_variants(db):
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "load-2", "brand": "Pixi", "category_id": cat.id,
+    })
+    generate_variants(db, actor, p.id, ["38", "39"], ["black"], {"price": "500.00"})
+
+    loaded = get_product_for_admin(db, p.id)
+
+    assert len(loaded["variants"]) == 2
+
+
+def test_editor_load_of_a_missing_product_is_404(db):
+    with pytest.raises(HTTPException) as exc:
+        get_product_for_admin(db, 10**9)
+    assert exc.value.status_code == 404

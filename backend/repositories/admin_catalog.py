@@ -429,6 +429,65 @@ def generate_variants(db, actor, product_id: int, sizes, colors, defaults: dict)
     return created
 
 
+def get_product_for_admin(db, product_id: int) -> dict:
+    """Everything the editor needs, regardless of publish state.
+
+    Three queries — the product, its translations, its variants — so the shape
+    stays constant as a product gains variants.
+    """
+    product = db.get(Product, product_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail="product not found")
+
+    translations = [
+        {
+            "locale": t.locale,
+            "title": t.title,
+            "description": t.description,
+            "slug": t.slug,
+            "meta_description": t.meta_description,
+            "is_published": t.is_published,
+            "is_complete": t.is_complete,
+        }
+        for t in db.execute(
+            select(ProductTranslation)
+            .where(ProductTranslation.product_id == product_id)
+            .order_by(ProductTranslation.locale)
+        ).scalars()
+    ]
+
+    variants = [
+        {
+            "id": v.id,
+            "sku": v.sku,
+            "variant_title": v.variant_title,
+            "size": v.size,
+            "color": v.color,
+            "price": v.price,
+            "sale_price": v.sale_price,
+            "stock_quantity": v.stock_quantity,
+            "is_active": v.is_active,
+        }
+        for v in db.execute(
+            select(ProductVariant)
+            .where(ProductVariant.product_id == product_id)
+            .order_by(ProductVariant.id)
+        ).scalars()
+    ]
+
+    return {
+        "id": product.id,
+        "item_group_id": product.item_group_id,
+        "slug": product.slug,
+        "title": product.title,
+        "brand": product.brand,
+        "status": product.status.value if hasattr(product.status, "value") else product.status,
+        "category_id": product.category_id,
+        "translations": translations,
+        "variants": variants,
+    }
+
+
 def publish_readiness(db: Session, product_id: int, locale: str) -> list[dict]:
     """What still blocks this language from publishing, as data.
 
