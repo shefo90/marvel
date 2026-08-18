@@ -109,3 +109,103 @@ def test_admin_listing_shows_drafts_that_the_public_listing_hides(client, staff_
     # Every row the admin sees under status=draft must be a draft; the public
     # endpoint has no such view at all.
     assert all(item["status"] == "draft" for item in admin.json()["items"])
+
+
+def _any_level2_category_id() -> int:
+    """Seed data provides level-2 categories; this test needs one that exists."""
+    from sqlalchemy import select
+
+    from core.db import SessionLocal
+    from models.categories import Category
+
+    db = SessionLocal()
+    try:
+        return db.execute(
+            select(Category.id).where(Category.level == 2).order_by(Category.id).limit(1)
+        ).scalar_one()
+    finally:
+        db.close()
+
+
+@pytest.fixture
+def e2e_cleanup():
+    """Remove the product this test commits, so the suite is repeatable."""
+    slugs: list[str] = []
+    yield slugs
+
+    from sqlalchemy import select
+
+    from models.product_translations import ProductTranslation
+    from models.product_variants import ProductVariant
+    from models.products import Product
+
+    db = SessionLocal()
+    try:
+        for slug in slugs:
+            product = db.execute(
+                select(Product).where(Product.slug == slug)
+            ).scalar_one_or_none()
+            if product is None:
+                continue
+            # default_variant_id references a variant, so clear it before the
+            # variants are removed or the FK blocks the delete. The brief's
+            # fixture nulls default_variant_id alone, but this test publishes
+            # the product (status becomes 'active'), and
+            # ck_products_active_has_default_variant forbids status='active'
+            # with a NULL default_variant_id -- so status must drop out of
+            # 'active' in the same update or the clear itself raises
+            # IntegrityError.
+            product.status = "draft"
+            product.default_variant_id = None
+            db.flush()
+            for model in (ProductTranslation, ProductVariant):
+                for row in db.execute(
+                    select(model).where(model.product_id == product.id)
+                ).scalars():
+                    db.delete(row)
+            db.delete(product)
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_operator_can_take_a_product_from_nothing_to_published(client, staff_token, e2e_cleanup):
+    """The whole point of this slice: a shop operator, not a developer."""
+    token = staff_token("catalog")
+    auth = {"Authorization": f"Bearer {token}"}
+
+    categories = client.get("/api/admin/products", headers=auth)
+    assert categories.status_code == 200
+
+    created = client.post("/api/admin/products", headers=auth, json={
+        "title": "E2E Sandal", "slug": "e2e-sandal", "brand": "Pixi",
+        "category_id": _any_level2_category_id(),
+    })
+    assert created.status_code == 201, created.text
+    e2e_cleanup.append("e2e-sandal")
+    product_id = created.json()["id"]
+
+    variants = client.post(
+        f"/api/admin/products/{product_id}/variants", headers=auth,
+        json={"sizes": ["38", "39"], "colors": ["black"], "price": "500.00",
+              "stock_quantity": 5},
+    )
+    assert variants.status_code == 201
+    assert len(variants.json()) == 2
+
+    not_ready = client.post(
+        f"/api/admin/products/{product_id}/publish?locale=ar", headers=auth
+    )
+    assert not_ready.status_code == 422
+    assert any(b["code"] == "no_translation" for b in not_ready.json()["detail"])
+
+    client.put(
+        f"/api/admin/products/{product_id}/translations/ar", headers=auth,
+        json={"title": "صندل", "description": "وصف", "meta_description": "قصير"},
+    )
+
+    published = client.post(
+        f"/api/admin/products/{product_id}/publish?locale=ar", headers=auth
+    )
+    assert published.status_code == 200
+    assert published.json()["is_published"] is True
