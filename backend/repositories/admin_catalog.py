@@ -15,6 +15,7 @@ its translations, and the total. ``scripts/check_query_count.py`` enforces a
 budget on the public listing for the same reason.
 """
 
+import hashlib
 import re
 import secrets
 from decimal import Decimal
@@ -292,11 +293,70 @@ def _invalidate(
         cache.delete(*(cache.key(cache.NS_PRODUCT, loc, slug) for loc, slug in stale))
 
 
+def _clean_sku_segment(raw: str) -> str:
+    """ASCII letters, digits and hyphens only, upper-cased — exactly what
+    ck_variants_sku_format (^[A-Z0-9][A-Z0-9-]*$) allows inside a segment.
+
+    ``str.isalnum()``/``str.upper()`` are Unicode-aware, so an Arabic colour
+    name would otherwise sail straight through and violate the constraint.
+    ``isascii()`` is what actually restricts this to what the CHECK allows.
+    """
+    return "".join(
+        ch for ch in raw.upper() if ch.isascii() and (ch.isalnum() or ch == "-")
+    )
+
+
 def _variant_sku(item_group_id: str, size: str, color: str) -> str:
-    """Deterministic and constraint-shaped: ^[A-Z0-9][A-Z0-9-]*$."""
-    parts = [item_group_id, size, color]
-    cleaned = ["".join(ch for ch in p.upper() if ch.isalnum()) for p in parts]
-    return "-".join(part for part in cleaned if part)
+    """Deterministic and constraint-shaped: ^[A-Z0-9][A-Z0-9-]*$.
+
+    trg_variants_sku_immutable makes a bad SKU permanent — SKU is the join
+    key Merchant Center, the Meta catalog and GA4 all key off of — so this
+    must never emit anything outside the format, and two distinct inputs must
+    never collapse onto the same output. Cleaning discards whatever the
+    format forbids (non-ASCII such as an Arabic colour name, and punctuation
+    like "." or "/"), and that discarding is exactly what can make two
+    different inputs collide: "38.5" and "385" both clean to "385"; "M/L" and
+    "ML" both clean to "ML". Whenever cleaning changes or empties a segment,
+    a short stable hash of the ORIGINAL segment is appended so the discarded
+    information still keeps it distinct.
+    """
+    segments = []
+    for raw in (item_group_id, size, color):
+        cleaned = _clean_sku_segment(raw)
+        if cleaned != raw.upper() or not cleaned:
+            digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:6].upper()
+            cleaned = f"{cleaned}{digest}" if cleaned else digest
+        segments.append(cleaned)
+
+    sku = "-".join(segments).strip("-")
+    if not sku or not sku[0].isascii() or not sku[0].isalnum():
+        # Unreachable given the per-segment guarantees above, but the format
+        # constraint must never be violated by an input shape we didn't
+        # foresee, so fall back to a hash of the whole original tuple.
+        sku = hashlib.sha256(
+            "|".join((item_group_id, size, color)).encode("utf-8")
+        ).hexdigest()[:16].upper()
+    return sku
+
+
+def _unique_sku(db: Session, candidate: str, taken: set[str]) -> str:
+    """Disambiguate a SKU that collides with one already taken.
+
+    ``taken`` covers earlier rows generated in this same call (which are only
+    flushed, not yet committed, so a fresh query would not see them from
+    another connection — but does see them here, same transaction); the query
+    covers every other product's variants, since UNIQUE(sku) is global, not
+    per-product. trg_variants_sku_immutable makes a collision here permanent,
+    so a numeric suffix is appended rather than letting the insert fail.
+    """
+    sku = candidate
+    n = 2
+    while sku in taken or db.execute(
+        select(ProductVariant.id).where(ProductVariant.sku == sku)
+    ).first() is not None:
+        sku = f"{candidate}-{n}"
+        n += 1
+    return sku
 
 
 def generate_variants(db, actor, product_id: int, sizes, colors, defaults: dict):
@@ -317,26 +377,35 @@ def generate_variants(db, actor, product_id: int, sizes, colors, defaults: dict)
             status_code=400, detail="sale price cannot exceed the price"
         )
 
+    material = defaults.get("material")
+
+    # uq_product_variants_combination is (product_id, size, color, material) —
+    # keying the skip check on size/colour alone would silently drop a request
+    # that only differs by material: no row, no error.
     existing = {
-        (v.size, v.color)
+        (v.size, v.color, v.material)
         for v in db.execute(
             select(ProductVariant).where(ProductVariant.product_id == product_id)
         ).scalars()
     }
 
+    taken_skus: set[str] = set()
     created = []
     for size in sizes:
         for color in colors:
-            if (size, color) in existing:
+            if (size, color, material) in existing:
                 continue
+            candidate = _variant_sku(product.item_group_id, size, color)
+            sku = _unique_sku(db, candidate, taken_skus)
+            taken_skus.add(sku)
             variant = ProductVariant(
                 product_id=product_id,
-                sku=_variant_sku(product.item_group_id, size, color),
+                sku=sku,
                 variant_title=f"{size} / {color}",
                 size=size,
                 size_system=defaults.get("size_system"),
                 color=color,
-                material=defaults.get("material"),
+                material=material,
                 attributes={},
                 price=price,
                 sale_price=sale_price,

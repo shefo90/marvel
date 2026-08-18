@@ -1,5 +1,7 @@
 """Repository-level admin catalog writes, on the rolled-back session."""
 
+import re
+
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -334,3 +336,95 @@ def test_sale_price_above_price_is_rejected(db):
                           {"price": "500.00", "sale_price": "600.00"})
 
     assert exc.value.status_code == 400
+
+
+_SKU_RE = re.compile(r"^[A-Z0-9][A-Z0-9-]*$")
+
+# "black" in Arabic. Written as \uXXXX escapes rather than a literal: the
+# console this suite runs under is cp1252 and printing the literal raises
+# UnicodeEncodeError on a failed-assertion traceback.
+_ARABIC_BLACK = "أسود"
+
+
+def test_non_ascii_colour_produces_a_check_valid_sku(db):
+    """str.isalnum()/str.upper() are Unicode-aware, so an Arabic colour name
+    would otherwise sail straight through _variant_sku and violate
+    ck_variants_sku_format instead of being cleaned out."""
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "mx-sandal-6", "brand": "Pixi", "category_id": cat.id,
+    })
+
+    variants = generate_variants(
+        db, actor, p.id, ["38"], [_ARABIC_BLACK], {"price": "500.00"}
+    )
+
+    assert len(variants) == 1
+    assert _SKU_RE.match(variants[0].sku)
+
+
+def test_dotted_and_undotted_sizes_produce_different_skus(db):
+    """"38.5" and "385" both clean to "385" -- stripping punctuation must not
+    let two distinct sizes collide onto the same immutable SKU."""
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "mx-sandal-7", "brand": "Pixi", "category_id": cat.id,
+    })
+
+    variants = generate_variants(
+        db, actor, p.id, ["38.5", "385"], ["black"], {"price": "500.00"}
+    )
+
+    assert len(variants) == 2
+    by_size = {v.size: v.sku for v in variants}
+    for sku in by_size.values():
+        assert _SKU_RE.match(sku)
+    assert by_size["38.5"] != by_size["385"]
+
+
+def test_item_group_ids_differing_only_by_punctuation_produce_different_skus(db):
+    """item_group_id has no format validation (unlike slug), so "ABC-123" and
+    "ABC!123" are both valid and distinct, yet strip to the same "ABC123" --
+    generating the same size/colour on both products must not collide on the
+    global UNIQUE(sku)."""
+    cat, actor = _level2_category(db), _actor(db)
+    p1 = create_product(db, actor, {
+        "title": "Sandal", "slug": "mx-sandal-8", "brand": "Pixi", "category_id": cat.id,
+        "item_group_id": "ABC-123",
+    })
+    p2 = create_product(db, actor, {
+        "title": "Sandal", "slug": "mx-sandal-9", "brand": "Pixi", "category_id": cat.id,
+        "item_group_id": "ABC!123",
+    })
+
+    v1 = generate_variants(db, actor, p1.id, ["38"], ["black"], {"price": "500.00"})
+    v2 = generate_variants(db, actor, p2.id, ["38"], ["black"], {"price": "500.00"})
+
+    assert _SKU_RE.match(v1[0].sku)
+    assert _SKU_RE.match(v2[0].sku)
+    assert v1[0].sku != v2[0].sku
+
+
+def test_same_size_and_colour_with_different_material_creates_a_row(db):
+    """uq_product_variants_combination is (product_id, size, color, material).
+    Keying the skip check on size/colour alone would silently drop this
+    second call -- no row, no error -- instead of creating the new material."""
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "mx-sandal-10", "brand": "Pixi", "category_id": cat.id,
+    })
+    first = generate_variants(
+        db, actor, p.id, ["38"], ["black"], {"price": "500.00", "material": "leather"}
+    )
+
+    second = generate_variants(
+        db, actor, p.id, ["38"], ["black"], {"price": "500.00", "material": "suede"}
+    )
+
+    assert len(second) == 1
+    assert second[0].material == "suede"
+    # Same size/colour/item_group_id as `first` -- the SKU generator alone
+    # would propose the same candidate SKU for both; uniqueness must still
+    # hold against the global UNIQUE(sku) constraint.
+    assert second[0].sku != first[0].sku
+    assert _SKU_RE.match(second[0].sku)
