@@ -19,10 +19,13 @@ from repositories.admin_catalog import (
     create_product,
     generate_variants,
     list_products_for_admin,
+    publish_product,
+    publish_readiness,
     upsert_translation,
 )
 from routes.admin_deps import staff_at_least
 from schema.admin_catalog import (
+    admin_blocker,
     admin_product_create,
     admin_product_detail,
     admin_product_list_response,
@@ -114,3 +117,28 @@ def admin_generate_variants(
     for v in created:
         db.refresh(v)
     return created
+
+
+@router.get("/products/{product_id}/readiness", response_model=list[admin_blocker])
+def admin_publish_readiness(
+    product_id: int,
+    locale: str = Query(..., min_length=2, max_length=5),
+    actor: User = Depends(staff_at_least(LEVEL_CATALOG)),
+    db: Session = Depends(get_db),
+):
+    """What still blocks this language from publishing. Empty list means ready."""
+    return publish_readiness(db, product_id, locale)
+
+
+@router.post("/products/{product_id}/publish", response_model=admin_translation_detail)
+def admin_publish(
+    product_id: int,
+    locale: str = Query(..., min_length=2, max_length=5),
+    actor: User = Depends(staff_at_least(LEVEL_CATALOG)),
+    db: Session = Depends(get_db),
+):
+    """Publish one language. Returns 422 with a blocker list if not ready."""
+    tr = publish_product(db, actor, product_id, locale)
+    db.commit()
+    db.refresh(tr)
+    return tr

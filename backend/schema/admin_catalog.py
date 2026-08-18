@@ -88,6 +88,11 @@ class admin_variant_matrix(BaseModel):
     material: str | None = None
 
 
+class admin_blocker(BaseModel):
+    code: str
+    message: str
+
+
 class admin_variant_row(BaseModel):
     id: int
     sku: str

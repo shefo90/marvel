@@ -427,3 +427,117 @@ def generate_variants(db, actor, product_id: int, sizes, colors, defaults: dict)
 
     _invalidate(db, product_id)
     return created
+
+
+def publish_readiness(db: Session, product_id: int, locale: str) -> list[dict]:
+    """What still blocks this language from publishing, as data.
+
+    Mirrors the database CHECK constraints deliberately. The constraints remain
+    the authority -- this exists so the operator sees a sentence instead of an
+    IntegrityError.
+
+    ``is_complete`` is not consulted here, and must never be: it is a generated
+    column computed from description + meta_description only (it omits title),
+    so it does not mean "publishable" -- ck_..._published_requires_content also
+    requires title. Presence of every field in ``_PUBLISHABLE_FIELDS`` is
+    checked directly instead.
+    """
+    blockers: list[dict] = []
+
+    variant_count = db.execute(
+        select(func.count()).select_from(ProductVariant).where(
+            ProductVariant.product_id == product_id,
+            ProductVariant.is_active.is_(True),
+        )
+    ).scalar_one()
+    if variant_count == 0:
+        blockers.append({
+            "code": "no_variant",
+            "message": "Add at least one variant before publishing.",
+        })
+    else:
+        product = db.get(Product, product_id)
+        if product is not None and product.default_variant_id is None:
+            # ck_products_active_has_default_variant forbids status='active'
+            # while default_variant_id is NULL. publish_product backfills this
+            # itself before it ever reaches this check, so the normal path
+            # self-heals -- this is here so a standalone readiness check still
+            # reports the true state (e.g. right after the chosen default
+            # variant was deactivated).
+            blockers.append({
+                "code": "no_default_variant",
+                "message": "Set a default variant before publishing.",
+            })
+
+    tr = db.execute(
+        select(ProductTranslation).where(
+            ProductTranslation.product_id == product_id,
+            ProductTranslation.locale == locale,
+        )
+    ).scalar_one_or_none()
+
+    if tr is None:
+        blockers.append({
+            "code": "no_translation",
+            "message": f"No {locale} content exists yet.",
+        })
+    else:
+        missing = [f for f in _PUBLISHABLE_FIELDS if not getattr(tr, f, None)]
+        if missing:
+            blockers.append({
+                "code": "incomplete_translation",
+                "message": (
+                    f"{locale} needs: " + ", ".join(m.replace("_", " ") for m in missing)
+                ),
+            })
+
+    return blockers
+
+
+def publish_product(db: Session, actor, product_id: int, locale: str) -> ProductTranslation:
+    """Publish one language, activating the product if it was still a draft.
+
+    Backfills ``default_variant_id`` from the first active variant when it is
+    unset, before checking readiness. generate_variants sets it once when the
+    first variant is created, but nothing keeps it set afterward, and
+    ck_products_active_has_default_variant forbids status='active' while it is
+    NULL -- doing the backfill first means the normal path self-heals instead
+    of bouncing the operator with a blocker that publishing was about to fix
+    anyway.
+    """
+    product = db.get(Product, product_id)
+    if product is not None and product.default_variant_id is None:
+        first_active_id = db.execute(
+            select(ProductVariant.id)
+            .where(
+                ProductVariant.product_id == product_id,
+                ProductVariant.is_active.is_(True),
+            )
+            .order_by(ProductVariant.id)
+        ).scalars().first()
+        if first_active_id is not None:
+            product.default_variant_id = first_active_id
+            db.flush()
+
+    blockers = publish_readiness(db, product_id, locale)
+    if blockers:
+        raise HTTPException(status_code=422, detail=blockers)
+
+    tr = db.execute(
+        select(ProductTranslation).where(
+            ProductTranslation.product_id == product_id,
+            ProductTranslation.locale == locale,
+        )
+    ).scalar_one()
+
+    tr.is_published = True
+    # is_complete is GENERATED ALWAYS AS (...) STORED -- it is never assigned
+    # here. It also omits title from its expression, so it would be wrong
+    # even as a proxy for "publishable".
+    if product.status != "active":
+        product.status = "active"
+
+    db.flush()
+    db.refresh(tr)
+    _invalidate(db, product_id)
+    return tr

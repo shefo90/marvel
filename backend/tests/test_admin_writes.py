@@ -11,7 +11,13 @@ from models.locales import Locale
 from models.product_translations import ProductTranslation
 from models.url_redirects import UrlRedirect
 from models.users import User
-from repositories.admin_catalog import create_product, generate_variants, upsert_translation
+from repositories.admin_catalog import (
+    create_product,
+    generate_variants,
+    publish_product,
+    publish_readiness,
+    upsert_translation,
+)
 from services import cache
 
 
@@ -428,3 +434,138 @@ def test_same_size_and_colour_with_different_material_creates_a_row(db):
     # hold against the global UNIQUE(sku) constraint.
     assert second[0].sku != first[0].sku
     assert _SKU_RE.match(second[0].sku)
+
+
+def test_readiness_reports_a_missing_variant(db):
+    _locale(db, "ar")
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "pub-1", "brand": "Pixi", "category_id": cat.id,
+    })
+    upsert_translation(db, actor, p.id, "ar", {
+        "title": "صندل", "description": "وصف",
+        "meta_description": "قصير",
+    })
+
+    codes = {b["code"] for b in publish_readiness(db, p.id, "ar")}
+
+    assert "no_variant" in codes
+
+
+def test_readiness_reports_missing_translation_content(db):
+    _locale(db, "ar")
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "pub-2", "brand": "Pixi", "category_id": cat.id,
+    })
+    generate_variants(db, actor, p.id, ["38"], ["black"], {"price": "500.00"})
+    upsert_translation(db, actor, p.id, "ar", {"title": "صندل"})
+
+    codes = {b["code"] for b in publish_readiness(db, p.id, "ar")}
+
+    assert "incomplete_translation" in codes
+
+
+def test_a_ready_product_publishes_and_goes_active(db):
+    _locale(db, "ar")
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "pub-3", "brand": "Pixi", "category_id": cat.id,
+    })
+    generate_variants(db, actor, p.id, ["38"], ["black"], {"price": "500.00"})
+    upsert_translation(db, actor, p.id, "ar", {
+        "title": "صندل", "description": "وصف",
+        "meta_description": "قصير",
+    })
+
+    tr = publish_product(db, actor, p.id, "ar")
+
+    db.refresh(p)
+    assert tr.is_published is True
+    assert p.status == "active"
+
+
+def test_publishing_an_unready_product_raises_422_with_blockers(db):
+    _locale(db, "ar")
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "pub-4", "brand": "Pixi", "category_id": cat.id,
+    })
+    upsert_translation(db, actor, p.id, "ar", {"title": "صندل"})
+
+    with pytest.raises(HTTPException) as exc:
+        publish_product(db, actor, p.id, "ar")
+
+    assert exc.value.status_code == 422
+    assert isinstance(exc.value.detail, list)
+    assert {b["code"] for b in exc.value.detail} >= {"no_variant", "incomplete_translation"}
+
+
+def test_publishing_one_language_leaves_the_other_unpublished(db):
+    """Per-language publishing is the whole point of the draft flow."""
+    _locale(db, "ar")
+    _locale(db, "en")
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "pub-5", "brand": "Pixi", "category_id": cat.id,
+    })
+    generate_variants(db, actor, p.id, ["38"], ["black"], {"price": "500.00"})
+    upsert_translation(db, actor, p.id, "ar", {
+        "title": "صندل", "description": "وصف",
+        "meta_description": "قصير",
+    })
+    upsert_translation(db, actor, p.id, "en", {"title": "Sandal"})
+
+    publish_product(db, actor, p.id, "ar")
+
+    en = db.execute(
+        select(ProductTranslation).where(
+            ProductTranslation.product_id == p.id, ProductTranslation.locale == "en"
+        )
+    ).scalar_one()
+    assert en.is_published is False
+
+
+def test_readiness_reports_no_default_variant_when_it_was_cleared(db):
+    """ck_products_active_has_default_variant forbids status='active' while
+    default_variant_id is NULL. generate_variants sets it once, but nothing
+    stops it being cleared afterward (e.g. the chosen variant deactivated) --
+    readiness must surface that as data, not let publish crash into an
+    IntegrityError."""
+    _locale(db, "ar")
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "pub-6", "brand": "Pixi", "category_id": cat.id,
+    })
+    generate_variants(db, actor, p.id, ["38"], ["black"], {"price": "500.00"})
+    p.default_variant_id = None
+    db.flush()
+
+    codes = {b["code"] for b in publish_readiness(db, p.id, "ar")}
+
+    assert "no_default_variant" in codes
+
+
+def test_publish_backfills_a_cleared_default_variant(db):
+    """publish_product self-heals a cleared default_variant_id from the first
+    active variant rather than blocking the operator or raising a raw
+    IntegrityError at flush."""
+    _locale(db, "ar")
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "pub-7", "brand": "Pixi", "category_id": cat.id,
+    })
+    variants = generate_variants(db, actor, p.id, ["38"], ["black"], {"price": "500.00"})
+    p.default_variant_id = None
+    db.flush()
+    upsert_translation(db, actor, p.id, "ar", {
+        "title": "صندل", "description": "وصف",
+        "meta_description": "قصير",
+    })
+
+    tr = publish_product(db, actor, p.id, "ar")
+
+    db.refresh(p)
+    assert p.default_variant_id == variants[0].id
+    assert p.status == "active"
+    assert tr.is_published is True
