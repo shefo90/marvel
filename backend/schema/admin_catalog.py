@@ -40,6 +40,23 @@ class admin_product_list_response(BaseModel):
     total: int
 
 
+class admin_category_row(BaseModel):
+    """One choice in the product form's category picker.
+
+    ``parent_name`` because "Sandals" is meaningless on its own and two parents
+    may each have one; ``is_active`` because an inactive category is shown and
+    marked rather than hidden.
+    """
+
+    id: int
+    name: str
+    slug: str
+    parent_id: int
+    parent_name: str
+    position: int
+    is_active: bool
+
+
 class admin_product_create(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     slug: str = Field(min_length=1, max_length=255)
