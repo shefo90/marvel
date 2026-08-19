@@ -6,6 +6,7 @@ import NotFound from '../pages/NotFound/NotFound.jsx';
 import ProductEdit from '../pages/ProductEdit/ProductEdit.jsx';
 import ProductNew from '../pages/ProductNew/ProductNew.jsx';
 import Products from '../pages/Products/Products.jsx';
+import Promotions from '../pages/Promotions/Promotions.jsx';
 import RequireAuth from './RequireAuth.jsx';
 
 /**
@@ -30,6 +31,7 @@ export default function AppRoutes() {
         <Route path="/products" element={<Products />} />
         <Route path="/products/new" element={<ProductNew />} />
         <Route path="/products/:id" element={<ProductEdit />} />
+        <Route path="/offers" element={<Promotions />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>

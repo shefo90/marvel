@@ -4,7 +4,10 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth.js';
 import styles from './AdminLayout.module.scss';
 
-const ITEMS = [{ key: '/products', label: <Link to="/products">Products</Link> }];
+const ITEMS = [
+  { key: '/products', label: <Link to="/products">Products</Link> },
+  { key: '/offers', label: <Link to="/offers">Offers</Link> },
+];
 
 /**
  * The chrome every protected screen sits inside.
@@ -23,7 +26,7 @@ export default function AdminLayout() {
         <Menu
           theme="dark"
           mode="inline"
-          selectedKeys={[location.pathname.startsWith('/products') ? '/products' : '']}
+          selectedKeys={[location.pathname.startsWith('/offers') ? '/offers' : '/products']}
           items={ITEMS}
         />
       </Layout.Sider>
