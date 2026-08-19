@@ -1,0 +1,42 @@
+@use '../../../assets/styles/variables' as v;
+
+.shell {
+  min-height: 100vh;
+}
+
+.brand {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 600;
+  padding: v.$space-md;
+}
+
+.header {
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: v.$space-md;
+  padding-inline: v.$space-lg;
+}
+
+.actor {
+  color: rgba(0, 0, 0, 0.65);
+}
+
+.signOut {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: rgba(0, 0, 0, 0.65);
+  padding: 0;
+
+  &:hover {
+    color: #1677ff;
+  }
+}
+
+.content {
+  margin: 0 auto;
+  width: 100%;
+}

@@ -1,0 +1,18 @@
+@use '../../../assets/styles/variables' as v;
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: v.$space-md;
+  margin-bottom: v.$space-md;
+}
+
+.title {
+  margin-bottom: 0 !important;
+}
+
+.actions {
+  display: flex;
+  gap: v.$space-sm;
+}

@@ -135,8 +135,11 @@ Three details the interceptor gets wrong if written casually:
 Tokens reach the module through a setter rather than a React import, keeping `services/api.js` free
 of React and honouring the structure document's "centralize API logic here".
 
-A proactive refresh fires at 80% of `expires_in` (24 minutes of the 30-minute access token), so a
-long editing session does not 401 mid-save.
+**No proactive refresh timer.** The design first called for one at 80% of `expires_in`, to avoid a
+401 mid-save. It was dropped during implementation: the reactive path already covers that case
+exactly — a save that 401s is refreshed and retried transparently, and the first attempt did nothing,
+so the retry is safe. A background timer rotating tokens on its own is one more thing to get wrong
+for a case that is already handled.
 
 **Role is read from the JWT payload for display only** — hiding the COGS field below `admin`. The
 client never trusts it: `routes/admin_deps.py` re-reads the actor from the database on every request
