@@ -11,6 +11,7 @@ from core.db import Engine
 from routes import (
     admin_catalog,
     admin_images,
+    admin_orders,
     admin_promotions,
     auth,
     cart,
@@ -51,6 +52,7 @@ app = FastAPI(
 app.include_router(admin_catalog.router)
 app.include_router(admin_images.router)
 app.include_router(admin_promotions.router)
+app.include_router(admin_orders.router)
 
 # Uploaded imagery. Created on startup because StaticFiles refuses to mount a
 # directory that does not exist, and a fresh checkout has never uploaded

@@ -7,6 +7,7 @@ import styles from './AdminLayout.module.scss';
 const ITEMS = [
   { key: '/products', label: <Link to="/products">Products</Link> },
   { key: '/offers', label: <Link to="/offers">Offers</Link> },
+  { key: '/orders', label: <Link to="/orders">Orders</Link> },
 ];
 
 /**
@@ -26,7 +27,10 @@ export default function AdminLayout() {
         <Menu
           theme="dark"
           mode="inline"
-          selectedKeys={[location.pathname.startsWith('/offers') ? '/offers' : '/products']}
+          selectedKeys={[
+            ['/orders', '/offers'].find((path) => location.pathname.startsWith(path)) ??
+              '/products',
+          ]}
           items={ITEMS}
         />
       </Layout.Sider>
