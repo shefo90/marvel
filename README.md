@@ -19,15 +19,18 @@ behind them.
 | **Admin stage 1 — catalog writes** | Done. Products, variants, per-language content, publish with structured blockers |
 | **Admin stage 2 — images** | Done. Upload, decode-based validation, EXIF stripped, derivatives, content-addressed storage |
 | **Admin stage 3 — offers** | Done. `promotions`, one pricing implementation shared by cart and checkout, BOGO, attribution |
-| **Admin stage 4 — the UI** | Done. `admin/`, the first JavaScript in this repository |
-| **S2 — storefront & SEO** | Not started. Rendering decided: React SSR on Vite via Vike |
-| **S3–S7** | Not started |
+| **Admin stage 4 — the UI** | Done. `admin/`, products, images, offers and orders |
+| **Order management** | Done. `operations` role: the queue, one order's detail, recorded status moves |
+| **S2 — storefront & SEO** | Done. `storefront/`, server-rendered on Vike, bilingual with RTL, sitemaps and JSON-LD. **A shopper can buy** |
+| **S3 — browser measurement** | Done. dataLayer, GA4 ecommerce events, Consent Mode v2. Needs a GTM container id |
+| **S4 — commerce integrations** | COD works end to end. **Not done:** payment gateway, courier adapter, background queue, retries |
+| **S5–S7** | Not started |
 
-267 backend tests, 65 admin tests. Five migrations.
+305 backend tests, 70 admin tests, 50 storefront tests. Five migrations.
 
-**Order management does not exist yet.** The role ladder reserves `operations` for orders,
-shipments and refunds, and no screen or endpoint covers it — an operator can build the catalogue
-but cannot see a single order.
+**A shopper can browse in either language, add to a cart, check out with cash on delivery, and an
+operator can see the order and move it along.** What is missing is card payment, a courier
+integration, server-side measurement, and the catalogue feeds.
 
 ## Running it
 
@@ -116,6 +119,27 @@ npm test             # vitest + testing-library + msw
 npm run build
 ```
 
+## Running the storefront
+
+```bash
+cd storefront
+npm install
+npm run dev          # http://localhost:3000 — redirects to /en
+```
+
+The API must be running on 8000; `/api`, `/media`, `/robots.txt` and the sitemaps are proxied to it,
+so the browser sees one origin exactly as in production. `npm run dev` and `npm run preview` run the
+*same* `server.js`, which is why `/` redirects identically in both.
+
+Two languages, decided only by the URL: `/en/...` and `/ar/...`. `/arabic`, `/AR` and `/ar-eg` are
+404s by design — rendering them would be the soft 404 §8A forbids.
+
+```bash
+cd storefront
+npm test
+npm run build
+```
+
 ## Diagnostic scripts
 
 These are not tests; they answer specific questions about a running system.
@@ -160,6 +184,17 @@ Imports flow one way: `routes → repositories → models → core`. `services/`
 The admin app follows the structure in `React Front-end Project Structure Documentation (1).pdf`,
 which is a different convention on purpose — that document is the one the frontend was asked to
 match.
+
+```
+storefront/
+├── server.js          Express + Vike; the same server in dev and production
+├── pages/             Vike file-system routing, +Page/+data/+route per screen
+├── layouts/           the chrome every page sits inside
+├── components/        common/ only — the storefront has no admin-style widgets
+├── services/          api, catalog, cart, dataLayer
+├── hooks/             locale, cart, page context, tracking
+└── utils/             locales, head (the SEO contract), events, money
+```
 
 ```
 admin/src/
@@ -207,6 +242,18 @@ admin/src/
   `all` explicitly, so a half-saved offer cannot mark everything down.
 - **Uploaded images are identified by decoding them**, never by extension or declared content
   type, and SVG is refused outright — it is XML that can carry script.
+- **The URL is the only thing that decides language.** Never `Accept-Language`, never a cookie,
+  never IP. `<html lang/dir>` is set by the server and never from the browser, and switching
+  language is a full navigation (the links carry `rel="external"` so the client router leaves them
+  alone).
+- **Western digits in both locales.** `ar-EG` defaults to Arabic-Indic, so `Intl.NumberFormat` is
+  given `numberingSystem: 'latn'` explicitly. Formatted numerals must never reach analytics —
+  dataLayer values carry raw numbers.
+- **`item_id` is the SKU** in every measurement event. It is the value GA4, Ads, Merchant Center
+  and the Meta catalogue all join on.
+- **Deleting an order does not work** while a converted cart points at it:
+  `ck_carts_converted_consistency` forbids `status='converted'` with a NULL `converted_order_id`,
+  so the FK's `ON DELETE SET NULL` cannot fire. Move the cart out of `converted` first.
 
 ## Open questions
 
