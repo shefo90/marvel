@@ -50,7 +50,19 @@ with Engine.begin() as conn:
 print(f"tables: {tables}")
 print(f"triggers: {triggers}\n")
 
-check("47 tables present (46 + alembic_version)", tables == 47, str(tables))
+# Derived from the models rather than hardcoded. The count was pinned at 47 and
+# went stale the moment migration 0005 added promotions and promotion_targets --
+# a diagnostic that fails for a reason unrelated to what it diagnoses teaches
+# people to ignore it.
+import models  # noqa: E402  (imported here so the count is read, not remembered)
+from core.db import Base  # noqa: E402
+
+expected_tables = len(Base.metadata.tables) + 1  # + alembic_version
+check(
+    f"{expected_tables} tables present ({expected_tables - 1} mapped + alembic_version)",
+    tables == expected_tables,
+    str(tables),
+)
 check("5 triggers installed", len(triggers) == 5, str(len(triggers)))
 
 # --- The audit trigger ---------------------------------------------------
