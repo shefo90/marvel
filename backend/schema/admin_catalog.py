@@ -175,6 +175,40 @@ class admin_variant_update(BaseModel):
     is_active: bool | None = None
 
 
+class admin_image_row(BaseModel):
+    id: int
+    url: str
+    alt_text: str
+    width: int
+    height: int
+    is_primary: bool
+    position: int
+    variant_id: int | None = None
+
+
+class admin_image_order(BaseModel):
+    """The whole set, in the order it should hold.
+
+    Every image exactly once: uq_product_images_position is not deferrable, so a
+    partial list leaves the omitted rows holding positions the new ones collide
+    with.
+    """
+
+    image_ids: list[int] = Field(min_length=1)
+    variant_id: int | None = None
+
+
+class admin_image_alt_upsert(BaseModel):
+    alt_text: str = Field(min_length=1, max_length=500)
+    title_attr: str | None = None
+
+
+class admin_image_translation_detail(BaseModel):
+    locale: str
+    alt_text: str
+    title_attr: str | None = None
+
+
 class admin_product_full(BaseModel):
     id: int
     item_group_id: str
@@ -193,3 +227,4 @@ class admin_product_full(BaseModel):
     tags: list[str] = []
     translations: list[admin_translation_detail]
     variants: list[admin_variant_row]
+    images: list[admin_image_row] = []

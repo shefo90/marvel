@@ -576,6 +576,24 @@ def get_product_for_admin(db, product_id: int) -> dict:
         ).scalars()
     ]
 
+    images = [
+        {
+            "id": i.id,
+            "url": i.url,
+            "alt_text": i.alt_text,
+            "width": i.width,
+            "height": i.height,
+            "is_primary": i.is_primary,
+            "position": i.position,
+            "variant_id": i.variant_id,
+        }
+        for i in db.execute(
+            select(ProductImage)
+            .where(ProductImage.product_id == product_id)
+            .order_by(ProductImage.variant_id.nulls_first(), ProductImage.position)
+        ).scalars()
+    ]
+
     return {
         "id": product.id,
         "item_group_id": product.item_group_id,
@@ -594,6 +612,7 @@ def get_product_for_admin(db, product_id: int) -> dict:
         "tags": list(product.tags or []),
         "translations": translations,
         "variants": variants,
+        "images": images,
     }
 
 

@@ -31,6 +31,13 @@ GUEST_CART_TTL_DAYS = int(os.getenv("GUEST_CART_TTL_DAYS", "30"))
 CUSTOMER_CART_TTL_DAYS = int(os.getenv("CUSTOMER_CART_TTL_DAYS", "90"))
 CART_ABANDONED_AFTER_HOURS = int(os.getenv("CART_ABANDONED_AFTER_HOURS", "24"))
 
+# Uploaded imagery. The one piece of state that is not in Postgres, which means
+# a Postgres backup does not cover it -- the volume behind MEDIA_ROOT must be in
+# the backup procedure. MEDIA_URL_PREFIX is what the browser sees, so moving the
+# files to a CDN later is a prefix change rather than a data migration.
+MEDIA_ROOT = os.getenv("MEDIA_ROOT", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "media"))
+MEDIA_URL_PREFIX = os.getenv("MEDIA_URL_PREFIX", "/media")
+
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))

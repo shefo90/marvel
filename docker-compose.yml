@@ -67,6 +67,12 @@ services:
       GUEST_CART_TTL_DAYS: "30"
       CUSTOMER_CART_TTL_DAYS: "90"
       CART_ABANDONED_AFTER_HOURS: "24"
+      MEDIA_ROOT: /var/lib/marvel/media
+    volumes:
+      # Uploaded imagery. This is the ONLY application state that is not in
+      # Postgres, so a database backup does not cover it -- this volume has to
+      # be in the backup procedure or every product photo is lost on rebuild.
+      - marvel_media:/var/lib/marvel/media
     ports:
       - "8000:8000"
     # Migrations run before the server accepts traffic. Tables are never created
@@ -77,3 +83,4 @@ services:
 
 volumes:
   marvel_pgdata:
+  marvel_media:
