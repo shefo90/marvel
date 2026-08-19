@@ -1,0 +1,29 @@
+@use '../../../assets/styles/variables' as v;
+
+.card {
+  background: v.$surface;
+  border: 1px solid v.$line;
+  border-radius: v.$radius;
+  padding: v.$space-md;
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-xs;
+}
+
+.link { text-decoration: none; color: inherit; }
+
+.frame {
+  // A fixed ratio box, so the card's height never depends on when the image
+  // arrives -- the other half of holding CLS down.
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  border-radius: v.$radius;
+  background: v.$ground;
+  margin-bottom: v.$space-sm;
+}
+
+.image { width: 100%; height: 100%; object-fit: cover; display: block; }
+.placeholder { width: 100%; height: 100%; }
+
+.title { font-size: 16px; margin: 0; font-weight: 600; }
+.brand { margin: 0; color: v.$ink-soft; font-size: 14px; }

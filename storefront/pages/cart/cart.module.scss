@@ -1,0 +1,96 @@
+@use '../../assets/styles/variables' as v;
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  gap: v.$space-xl;
+
+  @media (max-width: 860px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-md;
+}
+
+.line {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: v.$space-md;
+  background: v.$surface;
+  border: 1px solid v.$line;
+  border-radius: v.$radius;
+  padding: v.$space-md;
+}
+
+.lineMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.title { font-weight: 600; }
+.sku { color: v.$ink-soft; font-size: 13px; font-family: ui-monospace, monospace; }
+.notice { color: v.$sale; font-size: 13px; }
+
+.quantity input {
+  width: 72px;
+  padding: v.$space-xs v.$space-sm;
+  border: 1px solid v.$line;
+  border-radius: v.$radius;
+  // Arabic numerals in a right-to-left page still read left-to-right as a
+  // number; forcing the direction keeps "12" from rendering as "21".
+  direction: ltr;
+  text-align: center;
+}
+
+.lineTotal { font-weight: 600; white-space: nowrap; }
+
+.remove {
+  background: none;
+  border: 0;
+  color: v.$ink-soft;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.summary {
+  background: v.$surface;
+  border: 1px solid v.$line;
+  border-radius: v.$radius;
+  padding: v.$space-lg;
+  align-self: start;
+
+  dl {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: v.$space-sm v.$space-md;
+    margin: 0 0 v.$space-lg;
+  }
+
+  dd { margin: 0; text-align: end; }
+}
+
+.discount { color: v.$sale; }
+.totalLabel, .totalValue { font-size: 18px; font-weight: 700; }
+
+.checkout {
+  display: block;
+  text-align: center;
+  background: v.$accent;
+  color: #fff;
+  text-decoration: none;
+  border-radius: v.$radius;
+  padding: v.$space-md;
+  font-weight: 600;
+}
+
+.error { color: v.$sale; }

@@ -1,0 +1,88 @@
+@use '../../assets/styles/variables' as v;
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  gap: v.$space-xl;
+  align-items: start;
+
+  @media (max-width: 860px) { grid-template-columns: 1fr; }
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-lg;
+
+  fieldset {
+    border: 1px solid v.$line;
+    border-radius: v.$radius;
+    background: v.$surface;
+    padding: v.$space-lg;
+    display: flex;
+    flex-direction: column;
+    gap: v.$space-md;
+    margin: 0;
+  }
+
+  legend { padding-inline: v.$space-sm; font-weight: 600; }
+  label { display: flex; flex-direction: column; gap: v.$space-xs; }
+
+  input {
+    padding: v.$space-sm v.$space-md;
+    border: 1px solid v.$line;
+    border-radius: v.$radius;
+    font: inherit;
+  }
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: v.$space-md;
+
+  @media (max-width: 600px) { grid-template-columns: 1fr; }
+}
+
+.cod {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-xs;
+  margin: 0;
+  color: v.$ink-soft;
+
+  strong { color: v.$ink; }
+}
+
+.summary {
+  background: v.$surface;
+  border: 1px solid v.$line;
+  border-radius: v.$radius;
+  padding: v.$space-lg;
+  position: sticky;
+  top: v.$space-lg;
+}
+
+.total {
+  display: flex;
+  justify-content: space-between;
+  gap: v.$space-md;
+  font-size: 18px;
+  margin: 0 0 v.$space-lg;
+}
+
+.place {
+  width: 100%;
+  background: v.$accent;
+  color: #fff;
+  border: 0;
+  border-radius: v.$radius;
+  padding: v.$space-md;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:disabled { opacity: 0.6; cursor: not-allowed; }
+}
+
+.error { color: v.$sale; }

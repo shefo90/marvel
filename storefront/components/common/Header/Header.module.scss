@@ -1,0 +1,77 @@
+@use '../../../assets/styles/variables' as v;
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: v.$space-lg;
+  padding: v.$space-md v.$space-lg;
+  border-bottom: 1px solid v.$line;
+  background: v.$surface;
+}
+
+.brand {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  color: v.$ink;
+}
+
+.nav {
+  display: flex;
+  gap: v.$space-md;
+
+  a {
+    color: v.$ink-soft;
+    text-decoration: none;
+
+    &:hover { color: v.$ink; }
+  }
+}
+
+.tail {
+  // margin-inline-start, not margin-left: the header flips wholesale in Arabic
+  // and a physical property would pin this to the wrong edge.
+  margin-inline-start: auto;
+  display: flex;
+  align-items: center;
+  gap: v.$space-lg;
+}
+
+.languages {
+  display: flex;
+  gap: v.$space-sm;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 14px;
+
+  a { color: v.$ink-soft; text-decoration: none; }
+  a:hover { color: v.$ink; }
+}
+
+.currentLanguage {
+  color: v.$ink;
+  font-weight: 600;
+}
+
+.cart {
+  display: inline-flex;
+  align-items: center;
+  gap: v.$space-xs;
+  color: v.$ink;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: v.$accent;
+  color: #fff;
+  font-size: 12px;
+}

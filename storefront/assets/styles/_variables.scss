@@ -1,0 +1,19 @@
+// The storefront's own scale. Nothing here is shared with the admin: that app
+// uses Ant Design's tokens, and the two have no reason to agree.
+$ink: #16130f;
+$ink-soft: #6b625a;
+$line: #e7e1da;
+$surface: #ffffff;
+$ground: #faf8f5;
+$accent: #a63d5a;
+$accent-ink: #7d2c43;
+$sale: #b3261e;
+
+$space-xs: 4px;
+$space-sm: 8px;
+$space-md: 16px;
+$space-lg: 24px;
+$space-xl: 48px;
+
+$page-max: 1200px;
+$radius: 10px;

@@ -1,0 +1,64 @@
+@use 'variables' as v;
+@use 'mixins' as m;
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html, body { margin: 0; padding: 0; }
+
+body {
+  background: v.$ground;
+  color: v.$ink;
+  font-family: system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif;
+  line-height: 1.55;
+}
+
+// Arabic in Tahoma/Segoe is legible but cramped; the Arabic-first stack reads
+// far better and costs nothing when it is absent.
+:root[dir='rtl'] body {
+  font-family: 'Segoe UI', Tahoma, 'Noto Naskh Arabic', system-ui, sans-serif;
+}
+
+img { max-width: 100%; height: auto; }
+
+a { color: v.$accent-ink; }
+a, button { @include m.focus-ring; }
+
+.page {
+  @include m.page-width;
+  padding-block: v.$space-lg v.$space-xl;
+  min-height: 60vh;
+}
+
+// Visible only when focused: the first thing a keyboard user reaches, and
+// invisible to everyone else.
+.skip-link {
+  position: absolute;
+  inset-inline-start: -9999px;
+
+  &:focus {
+    inset-inline-start: v.$space-md;
+    top: v.$space-md;
+    z-index: 10;
+    background: v.$surface;
+    padding: v.$space-sm v.$space-md;
+    border-radius: v.$radius;
+  }
+}
+
+h1 { font-size: clamp(24px, 3vw, 34px); margin-block: 0 v.$space-md; }
+h2 { font-size: clamp(19px, 2vw, 24px); }
+
+// Present for a screen reader, absent for everyone else. Used for labels whose
+// meaning is obvious visually but invisible to assistive technology.
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

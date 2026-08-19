@@ -1,0 +1,16 @@
+@use 'variables' as v;
+
+@mixin page-width {
+  max-width: v.$page-max;
+  margin-inline: auto;
+  padding-inline: v.$space-lg;
+}
+
+// Every focusable thing gets this. A storefront that cannot be used from a
+// keyboard is a storefront a screen-reader user cannot buy from.
+@mixin focus-ring {
+  &:focus-visible {
+    outline: 2px solid v.$accent;
+    outline-offset: 2px;
+  }
+}

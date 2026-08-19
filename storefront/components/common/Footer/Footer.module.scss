@@ -1,0 +1,9 @@
+@use '../../../assets/styles/variables' as v;
+
+.footer {
+  margin-top: v.$space-xl;
+  padding: v.$space-lg;
+  border-top: 1px solid v.$line;
+  color: v.$ink-soft;
+  font-size: 14px;
+}
