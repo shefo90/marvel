@@ -264,6 +264,37 @@ def list_products(
     def load() -> dict:
         list_id = list_name = None
         collection_join = False
+        category_ids: list[int] | None = None
+
+        if category_slug:
+            cat = db.execute(
+                select(Category)
+                .join(
+                    CategoryTranslation,
+                    (CategoryTranslation.category_id == Category.id)
+                    & (CategoryTranslation.locale == locale),
+                )
+                .where(CategoryTranslation.slug == category_slug)
+            ).scalar_one_or_none()
+
+            if cat is None:
+                # An unknown slug matches nothing. Not "everything": a typo in a
+                # category URL must not quietly render the whole catalogue.
+                category_ids = []
+            else:
+                list_id, list_name = cat.list_id, cat.name
+                category_ids = [cat.id]
+                if cat.level == 1:
+                    # A level-1 category owns no products and never can --
+                    # products.category_level is generated as 2 with a composite
+                    # FK, so every product hangs off a level-2 category. Matching
+                    # only the named row therefore made "Shoes" an empty page
+                    # while "Sandals" worked, which is what "View all" hit.
+                    category_ids += list(
+                        db.execute(
+                            select(Category.id).where(Category.parent_id == cat.id)
+                        ).scalars()
+                    )
 
         def scoped(*, ignore: str | None = None):
             """The base query, optionally with one facet's own filter removed."""
@@ -273,14 +304,8 @@ def list_products(
                 .where(Product.status == "active")
             )
             stmt = _published(stmt, locale)
-            if category_slug:
-                stmt = stmt.join(
-                    Category, Category.id == Product.category_id
-                ).join(
-                    CategoryTranslation,
-                    (CategoryTranslation.category_id == Category.id)
-                    & (CategoryTranslation.locale == locale),
-                ).where(CategoryTranslation.slug == category_slug)
+            if category_ids is not None:
+                stmt = stmt.where(Product.category_id.in_(category_ids))
             if collection_slug:
                 stmt = stmt.join(
                     CollectionProduct, CollectionProduct.product_id == Product.id
@@ -296,19 +321,6 @@ def list_products(
                     max_price,
                 )
             )
-
-        if category_slug:
-            cat = db.execute(
-                select(Category)
-                .join(
-                    CategoryTranslation,
-                    (CategoryTranslation.category_id == Category.id)
-                    & (CategoryTranslation.locale == locale),
-                )
-                .where(CategoryTranslation.slug == category_slug)
-            ).scalar_one_or_none()
-            if cat:
-                list_id, list_name = cat.list_id, cat.name
 
         if collection_slug:
             collection_join = True

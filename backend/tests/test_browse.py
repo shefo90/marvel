@@ -162,6 +162,33 @@ def test_a_category_listing_shows_only_that_categorys_products(db, shop):
     assert sorted(_titles(result)) == ["Evening Heel", "Strap Sandal"]
 
 
+def test_a_level_one_category_shows_everything_under_it(db, shop):
+    """The "View all" bug.
+
+    products.category_level is generated as 2 with a composite FK, so a product
+    can only ever hang off a level-2 category. Matching the named row alone made
+    every top-level page -- the ones the navigation and every "View all" link
+    point at -- permanently empty, while its children worked fine.
+    """
+    result = list_products(db, "en", category_slug=_slug(db, shop["parent"]))
+
+    assert sorted(_titles(result)) == ["Evening Heel", "Strap Sandal"]
+
+
+def test_a_level_one_category_offers_facets_from_all_its_children(db, shop):
+    result = list_products(db, "en", category_slug=_slug(db, shop["parent"]))
+
+    assert {f["code"] for f in result["facets"]["sizes"]} == {"38", "39", "40"}
+
+
+def test_an_unknown_category_slug_matches_nothing_not_everything(db, shop):
+    """A typo in a category URL must not quietly render the whole catalogue."""
+    result = list_products(db, "en", category_slug=f"typo-{uuid.uuid4().hex[:8]}")
+
+    assert result["items"] == []
+    assert result["total"] == 0
+
+
 def test_filtering_by_size_narrows_the_listing(db, shop):
     result = list_products(
         db, "en", category_slug=_slug(db, shop["category"]), sizes=["40"]
