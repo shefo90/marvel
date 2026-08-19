@@ -10,15 +10,18 @@ html, body { margin: 0; padding: 0; }
 body {
   background: v.$ground;
   color: v.$ink;
-  font-family: system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif;
+  font-family: v.$font-body;
+  font-size: v.$text-base;
   line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-// Arabic in Tahoma/Segoe is legible but cramped; the Arabic-first stack reads
-// far better and costs nothing when it is absent.
-:root[dir='rtl'] body {
-  font-family: 'Segoe UI', Tahoma, 'Noto Naskh Arabic', system-ui, sans-serif;
-}
+// Arabic needs more room between lines than Latin at the same size: the script
+// carries marks above and below the baseline that collide at Latin leading.
+// Section 6.7 asks for this as a locale-scoped token rather than a component
+// override, so it applies everywhere at once.
+:root[dir='rtl'] body { line-height: 1.75; }
 
 img { max-width: 100%; height: auto; }
 
@@ -27,7 +30,7 @@ a, button { @include m.focus-ring; }
 
 .page {
   @include m.page-width;
-  padding-block: v.$space-lg v.$space-xl;
+  padding-block: v.$space-lg v.$space-2xl;
   min-height: 60vh;
 }
 
@@ -40,15 +43,28 @@ a, button { @include m.focus-ring; }
   &:focus {
     inset-inline-start: v.$space-md;
     top: v.$space-md;
-    z-index: 10;
+    z-index: 100;
     background: v.$surface;
     padding: v.$space-sm v.$space-md;
     border-radius: v.$radius;
+    box-shadow: v.$shadow-md;
   }
 }
 
-h1 { font-size: clamp(24px, 3vw, 34px); margin-block: 0 v.$space-md; }
-h2 { font-size: clamp(19px, 2vw, 24px); }
+h1, h2, h3 {
+  font-weight: 600;
+  letter-spacing: v.$tracking-tight;
+  color: v.$ink;
+}
+
+h1 {
+  font-size: v.$text-xl;
+  line-height: 1.15;
+  margin-block: 0 v.$space-md;
+}
+
+h2 { font-size: v.$text-lg; line-height: 1.25; }
+h3 { font-size: v.$text-md; line-height: 1.3; }
 
 // Present for a screen reader, absent for everyone else. Used for labels whose
 // meaning is obvious visually but invisible to assistive technology.

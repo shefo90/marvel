@@ -1,49 +1,121 @@
 @use '../../assets/styles/variables' as v;
 
+// --- hero ------------------------------------------------------------------
 .hero {
-  background: linear-gradient(135deg, #1f1b17 0%, #3a2f28 100%);
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: v.$radius-lg;
+  background: radial-gradient(
+      120% 140% at 82% 12%,
+      rgba(166, 61, 90, 0.32) 0%,
+      rgba(166, 61, 90, 0) 58%
+    ),
+    linear-gradient(150deg, v.$night 0%, v.$night-soft 68%, #4a3d33 100%);
   color: #f6f1ea;
-  border-radius: v.$radius;
-  padding: clamp(#{v.$space-lg}, 6vw, 96px);
-  margin-bottom: v.$space-xl;
+  padding: clamp(#{v.$space-xl}, 7vw, 104px) clamp(#{v.$space-lg}, 6vw, 88px);
+  margin-bottom: v.$space-2xl;
 }
 
-.heroText {
+// A soft off-frame disc, not decoration for its own sake: it gives the flat
+// panel a light source, which is most of what separated it from a coloured box.
+.hero::after {
+  content: '';
+  position: absolute;
+  inset-inline-end: -14%;
+  top: -38%;
+  width: 62%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(246, 241, 234, 0.14) 0%,
+    rgba(246, 241, 234, 0) 68%
+  );
+  z-index: -1;
+}
+
+.heroText { max-width: 40ch; }
+
+.eyebrow {
+  display: inline-block;
+  font-size: v.$text-xs;
+  font-weight: 600;
+  letter-spacing: v.$tracking-wide;
+  text-transform: uppercase;
+  color: rgba(246, 241, 234, 0.72);
+  border: 1px solid rgba(246, 241, 234, 0.28);
+  border-radius: v.$radius-pill;
+  padding: 5px v.$space-md;
+  margin-bottom: v.$space-lg;
+}
+
+.heroText h1 {
+  color: inherit;
+  font-size: v.$text-display;
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: v.$tracking-tight;
+  margin: 0 0 v.$space-md;
+}
+
+.heroText p {
+  color: rgba(246, 241, 234, 0.78);
+  margin: 0 0 v.$space-xl;
+  font-size: v.$text-md;
   max-width: 46ch;
-
-  h1 {
-    color: inherit;
-    font-size: clamp(28px, 5vw, 48px);
-    line-height: 1.15;
-    margin: 0 0 v.$space-md;
-  }
-
-  p {
-    color: rgba(246, 241, 234, 0.82);
-    margin: 0 0 v.$space-lg;
-    font-size: 16px;
-  }
 }
 
 .heroCta {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: v.$space-sm;
   background: #f6f1ea;
   color: v.$ink;
   text-decoration: none;
   font-weight: 600;
-  padding: 12px v.$space-lg;
-  border-radius: 999px;
+  font-size: v.$text-sm;
+  letter-spacing: v.$tracking-wide;
+  text-transform: uppercase;
+  padding: 14px v.$space-xl;
+  border-radius: v.$radius-pill;
+  transition: transform v.$duration v.$ease, box-shadow v.$duration v.$ease;
 
-  &:hover { background: #fff; }
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: v.$shadow-lg;
+  }
 }
 
-.section { margin-bottom: v.$space-xl; }
+// --- sections --------------------------------------------------------------
+.section { margin-bottom: v.$space-2xl; }
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: v.$space-md;
+  padding-bottom: v.$space-md;
+  border-bottom: 1px solid v.$line;
+  margin-bottom: v.$space-lg;
+}
 
 .sectionHeading {
   margin: 0;
-  font-size: clamp(18px, 2vw, 22px);
-  letter-spacing: 0.02em;
+  font-size: v.$text-lg;
 }
+
+.sectionLink {
+  font-size: v.$text-sm;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:hover { text-decoration: underline; }
+}
+
+.group { margin-top: v.$space-xl; }
 
 .groupHead {
   display: flex;
@@ -52,11 +124,17 @@
   gap: v.$space-md;
   margin-bottom: v.$space-md;
 
-  h3 { margin: 0; font-size: 16px; }
-  a { font-size: 13px; }
-}
+  h3 {
+    margin: 0;
+    font-size: v.$text-xs;
+    font-weight: 600;
+    letter-spacing: v.$tracking-wide;
+    text-transform: uppercase;
+    color: v.$ink-soft;
+  }
 
-.group { margin-top: v.$space-lg; }
+  a { font-size: v.$text-sm; text-decoration: none; }
+}
 
 .tiles {
   display: flex;
@@ -68,56 +146,78 @@
 
   a {
     display: inline-block;
-    padding: 10px v.$space-lg;
+    padding: 11px v.$space-lg;
     border: 1px solid v.$line;
-    border-radius: 999px;
+    border-radius: v.$radius-pill;
     background: v.$surface;
     color: v.$ink;
     text-decoration: none;
-    font-size: 14px;
+    font-size: v.$text-sm;
+    font-weight: 500;
+    transition: border-color v.$duration v.$ease, transform v.$duration v.$ease,
+      box-shadow v.$duration v.$ease;
 
-    &:hover { border-color: v.$ink; }
+    &:hover {
+      border-color: v.$ink;
+      transform: translateY(-1px);
+      box-shadow: v.$shadow-sm;
+    }
   }
 }
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: v.$space-lg;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: v.$space-lg v.$space-md;
 }
 
 .empty { margin: 0; }
 
+// --- edits -----------------------------------------------------------------
 .edits {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: v.$space-md;
   list-style: none;
   margin: 0;
   padding: 0;
 
   a {
-    display: block;
-    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    min-height: 148px;
     padding: v.$space-lg;
     border: 1px solid v.$line;
     border-radius: v.$radius;
-    background: v.$surface;
+    background: linear-gradient(160deg, v.$surface 0%, v.$ground-deep 100%);
     text-decoration: none;
     color: v.$ink;
+    transition: border-color v.$duration v.$ease, transform v.$duration v.$ease,
+      box-shadow v.$duration v.$ease;
 
-    &:hover { border-color: v.$ink; }
+    &:hover {
+      border-color: v.$ink;
+      transform: translateY(-2px);
+      box-shadow: v.$shadow-md;
+    }
   }
 }
 
 .editTitle {
   display: block;
   font-weight: 600;
+  font-size: v.$text-md;
   margin-bottom: v.$space-xs;
 }
 
 .editBlurb {
   display: block;
-  font-size: 13px;
+  font-size: v.$text-sm;
   color: v.$ink-soft;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heroCta, .tiles a, .edits a { transition: none; }
+  .heroCta:hover, .tiles a:hover, .edits a:hover { transform: none; }
 }

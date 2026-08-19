@@ -13,6 +13,7 @@ const COPY = {
     title: 'Marvel — women’s footwear and handbags',
     description:
       'Shoes and bags, delivered across Egypt. Cash on delivery available.',
+    eyebrow: 'Delivered across Egypt',
     heroTitle: 'Every step, considered.',
     heroBody:
       'Shoes and bags made for Egyptian summers and everything after them. Delivered nationwide, cash on delivery.',
@@ -25,6 +26,7 @@ const COPY = {
   ar: {
     title: 'مارفل — أحذية وحقائب نسائية',
     description: 'أحذية وحقائب، توصيل داخل مصر. الدفع عند الاستلام متاح.',
+    eyebrow: 'توصيل لكل المحافظات',
     heroTitle: 'كل خطوة لها حساب.',
     heroBody:
       'أحذية وحقائب لصيف مصر وما بعده. توصيل لكل المحافظات، والدفع عند الاستلام.',

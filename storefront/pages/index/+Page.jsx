@@ -22,6 +22,7 @@ export default function HomePage() {
     <>
       <section className={styles.hero}>
         <div className={styles.heroText}>
+          <span className={styles.eyebrow}>{copy.eyebrow}</span>
           <h1>{copy.heroTitle}</h1>
           <p>{copy.heroBody}</p>
           <a className={styles.heroCta} href={href('/c/shoes')}>
@@ -32,7 +33,9 @@ export default function HomePage() {
 
       {categories.length ? (
         <section className={styles.section}>
-          <h2 className={styles.sectionHeading}>{copy.shopCategory}</h2>
+          <div className={styles.sectionHead}>
+            <h2 className={styles.sectionHeading}>{copy.shopCategory}</h2>
+          </div>
           {categories.map((parent) => (
             <div key={parent.id} className={styles.group}>
               <div className={styles.groupHead}>
@@ -52,9 +55,11 @@ export default function HomePage() {
       ) : null}
 
       <section className={styles.section}>
-        <div className={styles.groupHead}>
+        <div className={styles.sectionHead}>
           <h2 className={styles.sectionHeading}>{copy.newIn}</h2>
-          <a href={href('/c/shoes')}>{copy.viewAll}</a>
+          <a className={styles.sectionLink} href={href('/c/shoes')}>
+            {copy.viewAll}
+          </a>
         </div>
 
         {listing.items.length === 0 ? (
@@ -71,7 +76,9 @@ export default function HomePage() {
 
       {collections.length ? (
         <section className={styles.section}>
-          <h2 className={styles.sectionHeading}>{copy.edits}</h2>
+          <div className={styles.sectionHead}>
+            <h2 className={styles.sectionHeading}>{copy.edits}</h2>
+          </div>
           <ul className={styles.edits}>
             {collections.map((collection) => (
               <li key={collection.id}>

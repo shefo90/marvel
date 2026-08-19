@@ -2,24 +2,29 @@
 @use '../../../assets/styles/mixins' as m;
 
 .header {
-  background: v.$surface;
+  background: rgba(255, 255, 255, 0.92);
+  // Sticky rather than fixed: fixed takes the header out of flow and every
+  // anchored jump then lands underneath it.
+  position: sticky;
+  top: 0;
+  z-index: 50;
   border-bottom: 1px solid v.$line;
-  position: relative;
-  z-index: 20;
+  backdrop-filter: blur(10px);
 }
 
 .bar {
   @include m.page-width;
   display: flex;
   align-items: center;
-  gap: v.$space-lg;
-  min-height: 64px;
+  gap: v.$space-xl;
+  min-height: 68px;
 }
 
 .brand {
-  font-size: 20px;
+  font-size: v.$text-md;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: v.$tracking-wide;
+  text-transform: uppercase;
   color: v.$ink;
   text-decoration: none;
   flex-shrink: 0;
@@ -39,16 +44,33 @@
 
 .topLink {
   display: inline-block;
-  padding: 20px 0;
+  padding: 24px 0;
   color: v.$ink;
   text-decoration: none;
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
+  font-size: v.$text-sm;
+  font-weight: 600;
+  letter-spacing: v.$tracking-wide;
   text-transform: uppercase;
+  position: relative;
 
-  &:hover { color: v.$accent-ink; }
+  // An underline that grows from the start edge. `inset-inline` means it grows
+  // right-to-left in Arabic without a second rule.
+  &::after {
+    content: '';
+    position: absolute;
+    inset-inline-start: 0;
+    bottom: 18px;
+    height: 1.5px;
+    width: 0;
+    background: v.$ink;
+    transition: width v.$duration v.$ease;
+  }
+
+  &:hover::after { width: 100%; }
 }
+
+.topItem:hover .topLink::after,
+.topItem:focus-within .topLink::after { width: 100%; }
 
 // Hidden by visibility rather than display:none, and present in the markup
 // either way. A crawler reads the links regardless, and CSS alone decides what
@@ -57,16 +79,16 @@
   position: absolute;
   inset-inline-start: 0;
   top: 100%;
-  min-width: 220px;
+  min-width: 240px;
   background: v.$surface;
   border: 1px solid v.$line;
   border-radius: v.$radius;
-  box-shadow: 0 12px 28px rgba(22, 19, 15, 0.1);
+  box-shadow: v.$shadow-lg;
   padding: v.$space-sm;
   opacity: 0;
   visibility: hidden;
-  transform: translateY(-4px);
-  transition: opacity 140ms ease, transform 140ms ease;
+  transform: translateY(-6px);
+  transition: opacity 160ms v.$ease, transform 160ms v.$ease;
 }
 
 .topItem:hover .panel,
@@ -76,10 +98,6 @@
   transform: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .panel { transition: none; }
-}
-
 .children {
   list-style: none;
   margin: 0;
@@ -87,12 +105,13 @@
 
   a {
     display: block;
-    padding: v.$space-sm v.$space-md;
-    border-radius: 6px;
+    padding: 9px v.$space-md;
+    border-radius: v.$radius-sm;
     color: v.$ink;
     text-decoration: none;
-    font-size: 14px;
+    font-size: v.$text-sm;
     white-space: nowrap;
+    transition: background v.$duration v.$ease;
 
     &:hover { background: v.$ground; color: v.$accent-ink; }
   }
@@ -101,7 +120,7 @@
 .viewAll {
   font-weight: 600;
   color: v.$accent-ink !important;
-  border-top: 1px solid v.$line;
+  border-top: 1px solid v.$line-soft;
   margin-top: v.$space-xs;
   padding-top: v.$space-sm !important;
   border-radius: 0 !important;
@@ -117,20 +136,24 @@
 
 .languages {
   display: flex;
+  align-items: center;
   gap: v.$space-sm;
   list-style: none;
   margin: 0;
   padding: 0;
-  font-size: 13px;
+  font-size: v.$text-sm;
+
+  a { color: v.$ink-soft; text-decoration: none; &:hover { color: v.$ink; } }
 }
 
-.currentLanguage { font-weight: 700; }
+.currentLanguage { font-weight: 700; color: v.$ink; }
 
 .cart {
   color: v.$ink;
   text-decoration: none;
   font-weight: 600;
-  font-size: 14px;
+  font-size: v.$text-sm;
+  letter-spacing: 0.02em;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -139,22 +162,27 @@
 .count {
   background: v.$accent;
   color: #fff;
-  border-radius: 999px;
+  border-radius: v.$radius-pill;
   min-width: 20px;
   height: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: v.$text-xs;
+  font-weight: 700;
   padding: 0 6px;
 }
 
 @media (max-width: 760px) {
-  .bar { flex-wrap: wrap; min-height: 0; padding-block: v.$space-sm; }
+  .bar { flex-wrap: wrap; min-height: 0; padding-block: v.$space-sm; gap: v.$space-md; }
   .nav { order: 3; width: 100%; overflow-x: auto; }
   .topLevel { gap: v.$space-md; }
-  .topLink { padding: v.$space-sm 0; }
+  .topLink { padding: v.$space-sm 0; &::after { display: none; } }
   // A hover panel is meaningless on a touch screen: the parent link goes to the
   // category page, which lists the children as tiles.
   .panel { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel, .topLink::after, .children a { transition: none; }
 }

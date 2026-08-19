@@ -12,7 +12,7 @@ $swatches: (
 .card {
   display: flex;
   flex-direction: column;
-  gap: v.$space-xs;
+  gap: 3px;
   min-width: 0;
 }
 
@@ -20,8 +20,6 @@ $swatches: (
   color: inherit;
   text-decoration: none;
   display: block;
-
-  &:hover .title { text-decoration: underline; }
 }
 
 .frame {
@@ -29,10 +27,12 @@ $swatches: (
   aspect-ratio: 4 / 5;
   overflow: hidden;
   border-radius: v.$radius;
-  background: v.$surface;
-  border: 1px solid v.$line;
-  margin-bottom: v.$space-sm;
+  background: v.$ground-deep;
+  margin-bottom: v.$space-md;
+  transition: box-shadow v.$duration v.$ease;
 }
+
+.card:hover .frame { box-shadow: v.$shadow-md; }
 
 .image,
 .hoverImage {
@@ -42,63 +42,70 @@ $swatches: (
   display: block;
 }
 
+.image { transition: transform 400ms v.$ease; }
+
+// A restrained zoom. Enough to register as responsive, small enough that the
+// product does not appear to change shape under the pointer.
+.card:hover .image { transform: scale(1.03); }
+
 // Stacked, not swapped: see the component. The second file is already fetched,
 // so the first hover does not show a blank frame.
 .hoverImage {
   position: absolute;
   inset: 0;
   opacity: 0;
-  transition: opacity 220ms ease;
+  transition: opacity 260ms v.$ease;
 }
 
 .frame:hover .hoverImage,
 .link:focus-visible .hoverImage { opacity: 1; }
 
-@media (prefers-reduced-motion: reduce) {
-  .hoverImage { transition: none; }
-}
-
 .badge {
   position: absolute;
-  top: v.$space-sm;
+  top: v.$space-md;
   // Logical, not `left`: on the Arabic page this has to sit on the right, and
   // the whole point of section 6.7 is that no JavaScript decides that.
-  inset-inline-start: v.$space-sm;
+  inset-inline-start: v.$space-md;
   background: v.$sale;
   color: #fff;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: v.$tracking-wide;
   text-transform: uppercase;
-  padding: 3px v.$space-sm;
-  border-radius: 999px;
+  padding: 4px 10px;
+  border-radius: v.$radius-pill;
+  z-index: 1;
 }
 
 .title {
-  font-size: 15px;
+  font-size: v.$text-sm;
   font-weight: 500;
-  line-height: 1.35;
+  line-height: 1.4;
   margin: 0;
+  letter-spacing: 0;
 }
+
+.link:hover .title { color: v.$accent-ink; }
 
 .swatches,
 .sizes {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  align-items: center;
+  gap: 5px;
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.swatches { margin-top: 2px; }
+.swatches { margin-top: v.$space-xs; }
 
 .swatch {
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  border: 1px solid rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(0, 0, 0, 0.16);
   background: #ccc;
 
   @each $code, $value in $swatches {
@@ -107,21 +114,27 @@ $swatches: (
 }
 
 .more {
-  font-size: 11px;
-  color: v.$ink-soft;
-  line-height: 14px;
+  font-size: 10px;
+  color: v.$ink-faint;
+  line-height: 12px;
 }
 
 .sizes {
-  font-size: 11px;
-  color: v.$ink-soft;
+  font-size: v.$text-xs;
+  color: v.$ink-faint;
+  margin-top: 2px;
 
   li::after { content: ','; }
   li:last-child::after { content: ''; }
 }
 
 .soldOut {
-  font-size: 11px;
-  color: v.$ink-soft;
-  margin: 0;
+  font-size: v.$text-xs;
+  color: v.$ink-faint;
+  margin: 2px 0 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .image, .hoverImage, .frame { transition: none; }
+  .card:hover .image { transform: none; }
 }

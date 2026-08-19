@@ -39,6 +39,18 @@ export default function onRenderHtml(pageContext) {
   <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <!-- One dual-script family for both locales. Section 6.7 asks for exactly
+         this: an Arabic page set in a Latin-first stack falls back to whatever
+         the OS happens to have, so the same shop looks like a different brand
+         after the language switch. IBM Plex Sans Arabic covers both scripts, so
+         headings, prices and product names keep one voice either side of it.
+
+         Still short of 6.7's full contract: this is Google's CDN rather than
+         self-hosted files subset by unicode-range, so it costs a third-party
+         connection and ships more of the family than either page needs. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com"/>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap"/>
     ${dangerouslySkipEscape(measurement)}
     ${dangerouslySkipEscape(head)}
   </head>
