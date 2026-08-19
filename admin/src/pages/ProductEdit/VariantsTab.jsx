@@ -89,7 +89,7 @@ export default function VariantsTab({ product }) {
           <Alert
             type="error"
             showIcon
-            message={generate.error.message}
+            title={generate.error.message}
             className={styles.alert}
           />
         ) : null}
@@ -119,10 +119,10 @@ export default function VariantsTab({ product }) {
               <Select aria-label="Colours" mode="tags" tokenSeparators={[',']} placeholder="black" />
             </Form.Item>
             <Form.Item label="Price" name="price" className={styles.field}>
-              <Input aria-label="Price" inputMode="decimal" addonAfter="EGP" />
+              <Input aria-label="Price" inputMode="decimal" suffix="EGP" />
             </Form.Item>
             <Form.Item label="Sale price" name="sale_price" className={styles.field}>
-              <Input aria-label="Sale price" inputMode="decimal" addonAfter="EGP" />
+              <Input aria-label="Sale price" inputMode="decimal" suffix="EGP" />
             </Form.Item>
             <Form.Item label="Stock" name="stock_quantity" className={styles.field}>
               <InputNumber aria-label="Stock" min={0} />
@@ -154,7 +154,7 @@ export default function VariantsTab({ product }) {
         destroyOnHidden
       >
         {save.isError ? (
-          <Alert type="error" showIcon message={save.error.message} className={styles.alert} />
+          <Alert type="error" showIcon title={save.error.message} className={styles.alert} />
         ) : null}
         <Form
           form={editForm}
@@ -171,14 +171,14 @@ export default function VariantsTab({ product }) {
             <Input />
           </Form.Item>
           <Form.Item label="Price" name="price">
-            <Input aria-label="Price" inputMode="decimal" addonAfter="EGP" />
+            <Input aria-label="Price" inputMode="decimal" suffix="EGP" />
           </Form.Item>
           <Form.Item
             label="Sale price"
             name="sale_price"
             extra="Cannot exceed the price."
           >
-            <Input aria-label="Sale price" inputMode="decimal" addonAfter="EGP" />
+            <Input aria-label="Sale price" inputMode="decimal" suffix="EGP" />
           </Form.Item>
           <Form.Item label="Stock" name="stock_quantity">
             <InputNumber aria-label="Stock" min={0} />
@@ -192,7 +192,7 @@ export default function VariantsTab({ product }) {
               name="cost"
               extra="Admins only. Feeds contribution profit."
             >
-              <Input aria-label="Cost" inputMode="decimal" addonAfter="EGP" />
+              <Input aria-label="Cost" inputMode="decimal" suffix="EGP" />
             </Form.Item>
           ) : null}
           <Form.Item label="Active" name="is_active" valuePropName="checked">

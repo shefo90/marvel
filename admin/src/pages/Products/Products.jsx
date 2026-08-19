@@ -110,7 +110,7 @@ export default function Products() {
       </Space>
 
       {isError ? (
-        <Alert type="error" showIcon message={error.message} className={styles.error} />
+        <Alert type="error" showIcon title={error.message} className={styles.error} />
       ) : null}
 
       <Table

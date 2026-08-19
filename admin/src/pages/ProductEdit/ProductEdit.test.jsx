@@ -6,6 +6,7 @@ import { setupServer } from 'msw/node';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, expect, it } from 'vitest';
 
+import { AuthProvider } from '../../context/AuthContext.jsx';
 import ProductEdit from './ProductEdit.jsx';
 
 const server = setupServer();
@@ -70,9 +71,11 @@ function renderEditor() {
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={['/products/7']}>
+        <AuthProvider>
         <Routes>
           <Route path="/products/:id" element={<ProductEdit />} />
         </Routes>
+        </AuthProvider>
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -127,4 +130,43 @@ it('archives only after a confirmation', async () => {
   await user.click(await screen.findByRole('button', { name: /^yes, archive$/i }));
 
   await waitFor(() => expect(archived).toBe(true));
+});
+
+it('refreshes the variant table after the matrix is generated', async () => {
+  // Caught by driving the real app: the POST returned 201 and the row appeared
+  // in the listing's variant count, but this table kept showing "No data".
+  // The editor reads the id from the URL, where it is a string, while the tab
+  // invalidated using product.id, a number -- ['product', '7'] and
+  // ['product', 7] are different cache entries, so the refetch missed.
+  const created = {
+    id: 12,
+    sku: 'SUEDE-A1B2C3-39-BLACK',
+    variant_title: '39 / black',
+    size: '39',
+    color: 'black',
+    price: '500.00',
+    sale_price: null,
+    stock_quantity: 0,
+    is_active: true,
+  };
+  let variants = [];
+  server.use(
+    http.get('*/api/admin/products/7', () => HttpResponse.json({ ...PRODUCT, variants })),
+    http.get('*/api/admin/categories', () => HttpResponse.json(CATEGORIES)),
+    http.get('*/api/admin/products/7/readiness', () => HttpResponse.json([])),
+    http.post('*/api/admin/products/7/variants', () => {
+      variants = [created];
+      return HttpResponse.json([created], { status: 201 });
+    }),
+  );
+  const user = userEvent.setup();
+  renderEditor();
+  await screen.findByDisplayValue('Suede Sandal');
+
+  await user.click(screen.getByRole('tab', { name: 'Variants' }));
+  await user.type(await screen.findByLabelText(/sizes/i), '39,');
+  await user.type(screen.getByLabelText(/colours/i), 'black,');
+  await user.click(screen.getByRole('button', { name: /generate/i }));
+
+  expect(await screen.findByText('SUEDE-A1B2C3-39-BLACK')).toBeInTheDocument();
 });

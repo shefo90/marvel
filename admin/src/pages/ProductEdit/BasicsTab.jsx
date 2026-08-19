@@ -58,10 +58,10 @@ export default function BasicsTab({ product }) {
       onFinish={onFinish}
     >
       {save.isError && Object.keys(save.error.fieldErrors ?? {}).length === 0 ? (
-        <Alert type="error" showIcon message={save.error.message} className={styles.alert} />
+        <Alert type="error" showIcon title={save.error.message} className={styles.alert} />
       ) : null}
       {save.isSuccess ? (
-        <Alert type="success" showIcon message="Saved." className={styles.alert} />
+        <Alert type="success" showIcon title="Saved." className={styles.alert} />
       ) : null}
 
       <Form.Item

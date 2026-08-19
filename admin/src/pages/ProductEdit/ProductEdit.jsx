@@ -24,7 +24,7 @@ export default function ProductEdit() {
   const archive = useArchiveProduct(id);
 
   if (isPending) return <Skeleton active paragraph={{ rows: 8 }} />;
-  if (isError) return <Alert type="error" showIcon message={error.message} />;
+  if (isError) return <Alert type="error" showIcon title={error.message} />;
 
   return (
     <>

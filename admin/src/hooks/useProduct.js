@@ -7,13 +7,24 @@ import {
 } from '../services/catalog.service.js';
 
 /**
+ * The cache key for one product.
+ *
+ * String(id) because the id arrives as a string from the URL (useParams) and as
+ * a number from the payload (product.id) -- ['product', '7'] and ['product', 7]
+ * are different cache entries, so a mutation invalidating one left the other
+ * showing stale data. That is not theoretical: generating variants returned 201
+ * while the table it should have refreshed kept saying "No data".
+ */
+export const productKey = (id) => ['product', String(id)];
+
+/**
  * One product, with its translations and variants -- the API returns all three
  * in a single call, so the editor never assembles a product from three
  * requests that can disagree with each other.
  */
 export function useProduct(id) {
   return useQuery({
-    queryKey: ['product', id],
+    queryKey: productKey(id),
     queryFn: () => getProduct(id),
     enabled: id != null,
   });
@@ -29,7 +40,7 @@ export function useProduct(id) {
 export function useInvalidateProduct(id) {
   const client = useQueryClient();
   return () => {
-    client.invalidateQueries({ queryKey: ['product', id] });
+    client.invalidateQueries({ queryKey: productKey(id) });
     client.invalidateQueries({ queryKey: ['products'] });
   };
 }

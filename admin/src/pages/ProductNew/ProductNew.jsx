@@ -70,7 +70,7 @@ export default function ProductNew() {
           <Alert
             type="error"
             showIcon
-            message={create.error.message}
+            title={create.error.message}
             className={styles.alert}
           />
         ) : null}

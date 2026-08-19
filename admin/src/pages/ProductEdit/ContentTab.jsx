@@ -75,15 +75,15 @@ export default function ContentTab({ product }) {
             title={`Cannot publish ${labelFor(locale)}`}
           />
         ) : (
-          <Alert type="error" showIcon message={publish.error.message} className={styles.alert} />
+          <Alert type="error" showIcon title={publish.error.message} className={styles.alert} />
         )
       ) : null}
 
       {save.isError ? (
-        <Alert type="error" showIcon message={save.error.message} className={styles.alert} />
+        <Alert type="error" showIcon title={save.error.message} className={styles.alert} />
       ) : null}
       {save.isSuccess ? (
-        <Alert type="success" showIcon message="Saved." className={styles.alert} />
+        <Alert type="success" showIcon title="Saved." className={styles.alert} />
       ) : null}
 
       <Form

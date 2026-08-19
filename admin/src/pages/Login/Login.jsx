@@ -45,7 +45,7 @@ export default function Login() {
         </Typography.Paragraph>
 
         {error ? (
-          <Alert type="error" message={error} className={styles.alert} showIcon />
+          <Alert type="error" title={error} className={styles.alert} showIcon />
         ) : null}
 
         <Form layout="vertical" onFinish={onFinish} requiredMark={false}>

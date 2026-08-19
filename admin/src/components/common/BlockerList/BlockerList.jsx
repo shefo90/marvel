@@ -15,7 +15,7 @@ export default function BlockerList({ blockers, title = 'Not ready to publish' }
     <Alert
       type="warning"
       showIcon
-      message={title}
+      title={title}
       description={
         <ul>
           {blockers.map((blocker) => (
