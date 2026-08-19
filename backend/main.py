@@ -18,6 +18,7 @@ from routes import (
     product,
     refresh,
     register,
+    seo,
 )
 from services import cache
 
@@ -63,6 +64,10 @@ app.include_router(auth.router)
 app.include_router(refresh.router)
 app.include_router(cart.router)
 app.include_router(order.router)
+
+# Root-level and crawler-facing: /robots.txt, /sitemap.xml, /sitemap-{locale}.xml.
+# Registered last so its bare paths cannot shadow an /api route.
+app.include_router(seo.router)
 
 
 @app.get("/health", tags=["ops"])

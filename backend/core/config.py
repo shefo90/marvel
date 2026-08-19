@@ -38,6 +38,11 @@ CART_ABANDONED_AFTER_HOURS = int(os.getenv("CART_ABANDONED_AFTER_HOURS", "24"))
 MEDIA_ROOT = os.getenv("MEDIA_ROOT", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "media"))
 MEDIA_URL_PREFIX = os.getenv("MEDIA_URL_PREFIX", "/media")
 
+# The storefront's public origin. Sitemaps must carry absolute URLs, and a
+# canonical tag is only meaningful as an absolute one -- so this is required
+# infrastructure, not a nicety. Section 13: from the environment, never hardcoded.
+SITE_BASE_URL = os.getenv("SITE_BASE_URL", "http://localhost:3000").rstrip("/")
+
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
