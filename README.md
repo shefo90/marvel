@@ -50,8 +50,16 @@ Migrations run automatically before the API accepts traffic. Then:
 Seed some catalog data:
 
 ```bash
-docker compose exec api python scripts/seed.py
+docker compose exec api python scripts/seed_taxonomy.py   # the shop's shape
+docker compose exec api python scripts/seed.py            # a couple of products
 ```
+
+`seed_taxonomy.py` creates the category tree, the collections, and the size and
+colour values the filter sidebar is built from — with Arabic labels, without which
+the Arabic filter sidebar renders "black" and "beige" in Latin script down the side
+of an RTL page. Both scripts are idempotent, and everything they create is ordinary
+data: renaming a category or removing a colour is a back-office action, not a code
+change.
 
 **Back up the `marvel_media` volume.** Uploaded images are the only application state that is not
 in Postgres, so a database backup does not cover them. Losing that volume loses every product
