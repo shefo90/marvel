@@ -1,0 +1,40 @@
+@use '../../assets/styles/variables' as v;
+@use '../../assets/styles/mixins' as m;
+
+.panel {
+  @include m.card-surface;
+}
+
+.form {
+  max-width: 760px;
+}
+
+.alert {
+  margin-bottom: v.$space-md;
+}
+
+.row {
+  width: 100%;
+  align-items: flex-start;
+}
+
+.field {
+  min-width: 180px;
+}
+
+.localeBar {
+  margin-bottom: v.$space-md;
+}
+
+.matrix {
+  margin-bottom: v.$space-lg;
+}
+
+.wideField {
+  min-width: 260px;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}

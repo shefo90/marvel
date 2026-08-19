@@ -101,6 +101,13 @@ class admin_translation_detail(BaseModel):
     description: str | None
     slug: str
     meta_description: str | None
+    # Optional so the upsert and publish routes, which return an ORM row rather
+    # than the editor's dict, keep validating against this same model.
+    seo_title: str | None = None
+    og_title: str | None = None
+    og_description: str | None = None
+    og_image_url: str | None = None
+    image_alt: str | None = None
     is_published: bool
     is_complete: bool
 
@@ -176,5 +183,13 @@ class admin_product_full(BaseModel):
     brand: str
     status: str
     category_id: int
+    # Everything the editor is allowed to change. Reading back exactly the set
+    # admin_product_update writes is what keeps the form from showing blank for
+    # a value that exists.
+    description: str | None = None
+    condition: str | None = None
+    gender: str | None = None
+    age_group: str | None = None
+    tags: list[str] = []
     translations: list[admin_translation_detail]
     variants: list[admin_variant_row]

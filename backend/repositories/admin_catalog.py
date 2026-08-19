@@ -516,6 +516,11 @@ def generate_variants(db, actor, product_id: int, sizes, colors, defaults: dict)
     return created
 
 
+def _enum_value(value):
+    """SAEnum columns hand back enum members; the API contract is strings."""
+    return value.value if hasattr(value, "value") else value
+
+
 def get_product_for_admin(db, product_id: int) -> dict:
     """Everything the editor needs, regardless of publish state.
 
@@ -533,6 +538,15 @@ def get_product_for_admin(db, product_id: int) -> dict:
             "description": t.description,
             "slug": t.slug,
             "meta_description": t.meta_description,
+            # The rest of what upsert_translation accepts. Returning fewer
+            # fields than the editor can write means the form either hides them
+            # or sends "" for values it never saw -- and these are the SEO and
+            # Open Graph fields, which is the worst possible thing to wipe.
+            "seo_title": t.seo_title,
+            "og_title": t.og_title,
+            "og_description": t.og_description,
+            "og_image_url": t.og_image_url,
+            "image_alt": t.image_alt,
             "is_published": t.is_published,
             "is_complete": t.is_complete,
         }
@@ -568,8 +582,16 @@ def get_product_for_admin(db, product_id: int) -> dict:
         "slug": product.slug,
         "title": product.title,
         "brand": product.brand,
-        "status": product.status.value if hasattr(product.status, "value") else product.status,
+        "status": _enum_value(product.status),
         "category_id": product.category_id,
+        # Every field _EDITABLE_BASE_FIELDS lets update_product write. The
+        # editor could previously write these without being able to read them,
+        # so the form rendered blank for values that existed.
+        "description": product.description,
+        "condition": _enum_value(product.condition),
+        "gender": _enum_value(product.gender),
+        "age_group": _enum_value(product.age_group),
+        "tags": list(product.tags or []),
         "translations": translations,
         "variants": variants,
     }

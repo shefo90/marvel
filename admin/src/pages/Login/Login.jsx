@@ -2,7 +2,7 @@ import { Alert, Button, Card, Form, Input, Typography } from 'antd';
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-import { useAuthContext } from '../../context/AuthContext.jsx';
+import { useAuth } from '../../hooks/useAuth.js';
 import { staffLogin } from '../../services/auth.service.js';
 import styles from './Login.module.scss';
 
@@ -14,7 +14,7 @@ import styles from './Login.module.scss';
  * is rather than duplicating auth routes to hide one path segment.
  */
 export default function Login() {
-  const { signIn } = useAuthContext();
+  const { signIn } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [error, setError] = useState(null);

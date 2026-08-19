@@ -1,7 +1,7 @@
 import { Layout, Menu, Typography } from 'antd';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 
-import { useAuthContext } from '../../../context/AuthContext.jsx';
+import { useAuth } from '../../../hooks/useAuth.js';
 import styles from './AdminLayout.module.scss';
 
 const ITEMS = [{ key: '/products', label: <Link to="/products">Products</Link> }];
@@ -13,7 +13,7 @@ const ITEMS = [{ key: '/products', label: <Link to="/products">Products</Link> }
  * app only as *content* being edited, never as interface.
  */
 export default function AdminLayout() {
-  const { session, signOut } = useAuthContext();
+  const { session, signOut } = useAuth();
   const location = useLocation();
 
   return (

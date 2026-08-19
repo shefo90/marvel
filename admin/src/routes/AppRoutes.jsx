@@ -3,6 +3,8 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import AdminLayout from '../components/layout/AdminLayout/AdminLayout.jsx';
 import Login from '../pages/Login/Login.jsx';
 import NotFound from '../pages/NotFound/NotFound.jsx';
+import ProductEdit from '../pages/ProductEdit/ProductEdit.jsx';
+import ProductNew from '../pages/ProductNew/ProductNew.jsx';
 import Products from '../pages/Products/Products.jsx';
 import RequireAuth from './RequireAuth.jsx';
 
@@ -26,6 +28,8 @@ export default function AppRoutes() {
       >
         <Route path="/" element={<Navigate to="/products" replace />} />
         <Route path="/products" element={<Products />} />
+        <Route path="/products/new" element={<ProductNew />} />
+        <Route path="/products/:id" element={<ProductEdit />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>

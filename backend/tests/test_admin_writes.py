@@ -1177,3 +1177,51 @@ def test_generating_variants_refuses_a_sku_that_would_overflow_the_column(db):
 
     assert exc.value.status_code == 400
     assert "item group id" in exc.value.detail.lower()
+
+
+def test_editor_load_includes_every_editable_base_field(db):
+    """The editor could write fields it could not read: update_product accepts
+    description, condition, gender, age_group and tags, and none of them came
+    back from get_product_for_admin. A form that renders blank for a value that
+    exists invites the operator to retype it -- or to believe it is unset."""
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "load-base-fields", "brand": "Pixi",
+        "category_id": cat.id, "description": "Soft suede.", "condition": "new",
+        "gender": "female", "age_group": "adult", "tags": ["summer", "suede"],
+    })
+
+    loaded = get_product_for_admin(db, p.id)
+
+    assert loaded["description"] == "Soft suede."
+    assert loaded["condition"] == "new"
+    assert loaded["gender"] == "female"
+    assert loaded["age_group"] == "adult"
+    assert loaded["tags"] == ["summer", "suede"]
+
+
+def test_editor_load_includes_every_writable_translation_field(db):
+    """Same asymmetry as the base fields, and worse here: upsert_translation
+    accepts eight fields and the editor load returned four. A form rendering
+    all eight would send "" for the four it could not read, silently wiping the
+    SEO and Open Graph metadata this whole project exists to get right."""
+    _locale(db, "ar")
+    cat, actor = _level2_category(db), _actor(db)
+    p = create_product(db, actor, {
+        "title": "Sandal", "slug": "load-tr-fields", "brand": "Pixi",
+        "category_id": cat.id,
+    })
+    upsert_translation(db, actor, p.id, "ar", {
+        "title": "T", "description": "D", "meta_description": "M",
+        "seo_title": "SEO", "og_title": "OG", "og_description": "OGD",
+        "og_image_url": "https://example.com/a.jpg", "image_alt": "ALT",
+    })
+
+    loaded = get_product_for_admin(db, p.id)
+    tr = next(t for t in loaded["translations"] if t["locale"] == "ar")
+
+    assert tr["seo_title"] == "SEO"
+    assert tr["og_title"] == "OG"
+    assert tr["og_description"] == "OGD"
+    assert tr["og_image_url"] == "https://example.com/a.jpg"
+    assert tr["image_alt"] == "ALT"
