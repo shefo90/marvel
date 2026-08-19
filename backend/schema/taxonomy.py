@@ -11,12 +11,30 @@ the Arabic and English pages for the same category must report the same
 from pydantic import BaseModel
 
 
+class taxonomy_image(BaseModel):
+    """Artwork for a tile.
+
+    Width and height are optional here, unlike on a product image: an operator's
+    own ``og_image_url`` is a bare URL with no dimensions recorded, while a
+    borrowed product shot carries them. The frontend reserves space from the
+    aspect ratio it lays out with, so a missing pair costs nothing in CLS.
+    """
+
+    url: str
+    alt_text: str | None = None
+    width: int | None = None
+    height: int | None = None
+
+
 class taxonomy_node(BaseModel):
     id: int
     slug: str
     title: str
     description: str | None = None
     list_id: str
+    # The operator's own artwork if they set one, otherwise a photograph
+    # borrowed from a product inside it, so a tile is never blank.
+    image: taxonomy_image | None = None
     seo_title: str | None = None
     meta_description: str | None = None
     is_indexable: bool = True

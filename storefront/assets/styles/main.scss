@@ -32,6 +32,12 @@ a, button { @include m.focus-ring; }
   @include m.page-width;
   padding-block: v.$space-lg v.$space-2xl;
   min-height: 60vh;
+
+  // Lets a section break out to the full viewport width with
+  // `margin-inline: calc(50% - 50vw)` without the 100vw creating a horizontal
+  // scrollbar. `clip` rather than `hidden` on purpose: `hidden` on an ancestor
+  // silently disables the header's position: sticky.
+  overflow-x: clip;
 }
 
 // Visible only when focused: the first thing a keyboard user reaches, and

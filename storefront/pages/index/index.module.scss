@@ -3,39 +3,58 @@
 // --- hero ------------------------------------------------------------------
 .hero {
   position: relative;
-  overflow: hidden;
   isolation: isolate;
-  border-radius: v.$radius-lg;
-  background: radial-gradient(
-      120% 140% at 82% 12%,
-      rgba(166, 61, 90, 0.32) 0%,
-      rgba(166, 61, 90, 0) 58%
-    ),
-    linear-gradient(150deg, v.$night 0%, v.$night-soft 68%, #4a3d33 100%);
-  color: #f6f1ea;
-  padding: clamp(#{v.$space-xl}, 7vw, 104px) clamp(#{v.$space-lg}, 6vw, 88px);
+  display: flex;
+  align-items: center;
+  min-height: clamp(420px, 62vh, 660px);
+  padding: v.$space-2xl clamp(#{v.$space-lg}, 7vw, 104px);
   margin-bottom: v.$space-2xl;
+
+  // Full-bleed out of the page container. `margin-inline` is logical, so this
+  // breaks out in both directions without a second rule for RTL. The page
+  // wrapper carries `overflow-x: clip` rather than `hidden`, because hidden on
+  // an ancestor silently disables the header's position: sticky.
+  width: 100vw;
+  margin-inline: calc(50% - 50vw);
+
+  background-color: v.$night;
+  background-size: cover;
+  background-position: center;
+  color: #f6f1ea;
 }
 
-// A soft off-frame disc, not decoration for its own sake: it gives the flat
-// panel a light source, which is most of what separated it from a coloured box.
-.hero::after {
-  content: '';
+// A directional scrim, not a flat overlay. Text sits over the dark end while
+// the image stays legible at the other, which is what stops a photographic
+// hero from turning into mud.
+// Gradients take no logical direction -- `to inline-end` is not valid CSS -- so
+// the RTL case is the one place here that needs an explicit second rule.
+.heroScrim {
   position: absolute;
-  inset-inline-end: -14%;
-  top: -38%;
-  width: 62%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    rgba(246, 241, 234, 0.14) 0%,
-    rgba(246, 241, 234, 0) 68%
-  );
+  inset: 0;
   z-index: -1;
+  background: linear-gradient(
+    to right,
+    rgba(20, 17, 14, 0.86) 0%,
+    rgba(20, 17, 14, 0.62) 38%,
+    rgba(20, 17, 14, 0.18) 72%,
+    rgba(20, 17, 14, 0.35) 100%
+  );
 }
 
-.heroText { max-width: 40ch; }
+:global(:root[dir='rtl']) .heroScrim {
+  background: linear-gradient(
+    to left,
+    rgba(20, 17, 14, 0.86) 0%,
+    rgba(20, 17, 14, 0.62) 38%,
+    rgba(20, 17, 14, 0.18) 72%,
+    rgba(20, 17, 14, 0.35) 100%
+  );
+}
+
+.heroText {
+  max-width: 42ch;
+  position: relative;
+}
 
 .eyebrow {
   display: inline-block;
@@ -43,35 +62,37 @@
   font-weight: 600;
   letter-spacing: v.$tracking-wide;
   text-transform: uppercase;
-  color: rgba(246, 241, 234, 0.72);
-  border: 1px solid rgba(246, 241, 234, 0.28);
+  color: rgba(246, 241, 234, 0.82);
+  border: 1px solid rgba(246, 241, 234, 0.34);
   border-radius: v.$radius-pill;
   padding: 5px v.$space-md;
   margin-bottom: v.$space-lg;
+  backdrop-filter: blur(4px);
 }
 
 .heroText h1 {
   color: inherit;
   font-size: v.$text-display;
   font-weight: 600;
-  line-height: 1.08;
+  line-height: 1.06;
   letter-spacing: v.$tracking-tight;
   margin: 0 0 v.$space-md;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.32);
 }
 
 .heroText p {
-  color: rgba(246, 241, 234, 0.78);
+  color: rgba(246, 241, 234, 0.86);
   margin: 0 0 v.$space-xl;
   font-size: v.$text-md;
-  max-width: 46ch;
+  max-width: 44ch;
 }
 
-.heroCta {
+.heroActions { display: flex; flex-wrap: wrap; gap: v.$space-sm; }
+
+.heroCta,
+.heroGhost {
   display: inline-flex;
   align-items: center;
-  gap: v.$space-sm;
-  background: #f6f1ea;
-  color: v.$ink;
   text-decoration: none;
   font-weight: 600;
   font-size: v.$text-sm;
@@ -79,145 +100,219 @@
   text-transform: uppercase;
   padding: 14px v.$space-xl;
   border-radius: v.$radius-pill;
-  transition: transform v.$duration v.$ease, box-shadow v.$duration v.$ease;
-
-  &:hover {
-    transform: translateY(-1px);
-    box-shadow: v.$shadow-lg;
-  }
+  transition: transform v.$duration v.$ease, box-shadow v.$duration v.$ease,
+    background v.$duration v.$ease;
 }
 
-// --- sections --------------------------------------------------------------
+.heroCta {
+  background: #f6f1ea;
+  color: v.$ink;
+  border: 1px solid #f6f1ea;
+
+  &:hover { transform: translateY(-1px); box-shadow: v.$shadow-lg; }
+}
+
+.heroGhost {
+  background: transparent;
+  color: #f6f1ea;
+  border: 1px solid rgba(246, 241, 234, 0.5);
+
+  &:hover { background: rgba(246, 241, 234, 0.12); }
+}
+
+// --- section divider -------------------------------------------------------
 .section { margin-bottom: v.$space-2xl; }
 
-.sectionHead {
+.divider {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: v.$space-md;
-  padding-bottom: v.$space-md;
-  border-bottom: 1px solid v.$line;
-  margin-bottom: v.$space-lg;
+  align-items: center;
+  gap: v.$space-lg;
+  margin-bottom: v.$space-xl;
 }
 
-.sectionHeading {
+.rule {
+  flex: 1;
+  height: 1px;
+  background: v.$line;
+}
+
+.dividerHeading {
   margin: 0;
   font-size: v.$text-lg;
+  font-weight: 600;
+  letter-spacing: v.$tracking-wide;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
-.sectionLink {
+// Absolute so the heading stays optically centred: in flow, the link's width
+// would push it off-centre by half of itself.
+.dividerLink {
+  position: absolute;
+  inset-inline-end: 0;
   font-size: v.$text-sm;
   font-weight: 600;
-  letter-spacing: 0.02em;
   text-decoration: none;
-  white-space: nowrap;
 
   &:hover { text-decoration: underline; }
 }
 
-.group { margin-top: v.$space-xl; }
+.divider { position: relative; }
 
-.groupHead {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: v.$space-md;
-  margin-bottom: v.$space-md;
-
-  h3 {
-    margin: 0;
-    font-size: v.$text-xs;
-    font-weight: 600;
-    letter-spacing: v.$tracking-wide;
-    text-transform: uppercase;
-    color: v.$ink-soft;
-  }
-
-  a { font-size: v.$text-sm; text-decoration: none; }
-}
-
+// --- category tiles --------------------------------------------------------
 .tiles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: v.$space-sm;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: v.$space-md;
   list-style: none;
   margin: 0;
   padding: 0;
 
   a {
-    display: inline-block;
-    padding: 11px v.$space-lg;
-    border: 1px solid v.$line;
-    border-radius: v.$radius-pill;
-    background: v.$surface;
-    color: v.$ink;
+    display: block;
     text-decoration: none;
-    font-size: v.$text-sm;
-    font-weight: 500;
-    transition: border-color v.$duration v.$ease, transform v.$duration v.$ease,
-      box-shadow v.$duration v.$ease;
-
-    &:hover {
-      border-color: v.$ink;
-      transform: translateY(-1px);
-      box-shadow: v.$shadow-sm;
-    }
+    color: v.$ink;
   }
 }
 
+.tileFrame {
+  display: block;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: v.$radius;
+  background: v.$ground-deep;
+  margin-bottom: v.$space-sm;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 500ms v.$ease;
+  }
+}
+
+.tiles a:hover .tileFrame img { transform: scale(1.05); }
+
+.tileLabel {
+  display: block;
+  text-align: center;
+  font-size: v.$text-sm;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.tiles a:hover .tileLabel { color: v.$accent-ink; }
+
+// --- product grids ---------------------------------------------------------
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: v.$space-lg v.$space-md;
+  gap: v.$space-xl v.$space-md;
 }
 
-.empty { margin: 0; }
+.empty { margin: 0; color: v.$ink-soft; }
 
 // --- edits -----------------------------------------------------------------
 .edits {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: v.$space-md;
   list-style: none;
   margin: 0;
   padding: 0;
 
   a {
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    min-height: 148px;
-    padding: v.$space-lg;
-    border: 1px solid v.$line;
+    position: relative;
+    display: block;
+    overflow: hidden;
     border-radius: v.$radius;
-    background: linear-gradient(160deg, v.$surface 0%, v.$ground-deep 100%);
     text-decoration: none;
-    color: v.$ink;
-    transition: border-color v.$duration v.$ease, transform v.$duration v.$ease,
-      box-shadow v.$duration v.$ease;
-
-    &:hover {
-      border-color: v.$ink;
-      transform: translateY(-2px);
-      box-shadow: v.$shadow-md;
-    }
+    color: #f6f1ea;
+    background: v.$night;
   }
+}
+
+.editFrame {
+  display: block;
+  aspect-ratio: 3 / 2;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    opacity: 0.72;
+    transition: transform 600ms v.$ease, opacity v.$duration v.$ease;
+  }
+}
+
+.edits a:hover .editFrame img { transform: scale(1.06); opacity: 0.85; }
+
+.editBody {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  padding: v.$space-lg;
+  background: linear-gradient(
+    to top,
+    rgba(20, 17, 14, 0.82) 0%,
+    rgba(20, 17, 14, 0) 100%
+  );
 }
 
 .editTitle {
   display: block;
   font-weight: 600;
   font-size: v.$text-md;
-  margin-bottom: v.$space-xs;
+  letter-spacing: 0.02em;
 }
 
-.editBlurb {
+.editCta {
+  display: block;
+  font-size: v.$text-xs;
+  letter-spacing: v.$tracking-wide;
+  text-transform: uppercase;
+  color: rgba(246, 241, 234, 0.78);
+  margin-top: 2px;
+}
+
+// --- promises --------------------------------------------------------------
+.promises {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: v.$space-md;
+  list-style: none;
+  margin: 0 0 v.$space-2xl;
+  padding: v.$space-xl 0 0;
+  border-top: 1px solid v.$line;
+
+  li { text-align: center; }
+}
+
+.promiseTitle {
+  display: block;
+  font-weight: 600;
+  font-size: v.$text-sm;
+  letter-spacing: 0.02em;
+  margin-bottom: 2px;
+}
+
+.promiseBody {
   display: block;
   font-size: v.$text-sm;
   color: v.$ink-soft;
 }
 
+@media (max-width: 760px) {
+  .hero { min-height: 380px; padding-block: v.$space-xl; }
+  .divider { gap: v.$space-md; }
+  .dividerLink { position: static; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .heroCta, .tiles a, .edits a { transition: none; }
-  .heroCta:hover, .tiles a:hover, .edits a:hover { transform: none; }
+  .heroCta, .heroGhost, .tileFrame img, .editFrame img { transition: none; }
+  .heroCta:hover { transform: none; }
+  .tiles a:hover .tileFrame img,
+  .edits a:hover .editFrame img { transform: none; }
 }

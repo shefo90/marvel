@@ -269,6 +269,41 @@ def join_collections() -> int:
     return joined
 
 
+def repair_external_images(staff) -> int:
+    """Replace image rows pointing outside /media with generated files.
+
+    The original seed.py wrote URLs at cdn.example.com, a host that does not
+    exist. Those rows render as broken images everywhere they appear -- and
+    since the category tiles borrow a product's photograph, one broken row took
+    a whole section of the homepage down with it.
+
+    Only rows whose URL is not served by this application are touched, so a real
+    CDN prefix configured through MEDIA_URL_PREFIX is left alone.
+    """
+    from services.storage import storage
+
+    prefix = storage.url_prefix
+    broken = db.execute(
+        select(ProductImage).where(~ProductImage.url.startswith(prefix))
+    ).scalars().all()
+
+    repaired = 0
+    for image in broken:
+        product = db.get(Product, image.product_id)
+        if product is None:
+            continue
+        db.delete(image)
+        db.flush()
+        add_image(
+            db, staff, product.id,
+            data=placeholder(product.title or product.slug, "beige", variant=0),
+            filename=f"{product.slug}-repaired.png",
+            alt_text=product.title or product.slug,
+        )
+        repaired += 1
+    return repaired
+
+
 def main() -> None:
     staff = actor()
     created = 0
@@ -291,6 +326,9 @@ def main() -> None:
                 skipped += 1
 
     joined = join_collections()
+    repaired = repair_external_images(staff)
+    if repaired:
+        print(f"\nimage rows repointed from an unreachable host: {repaired}")
     db.commit()
     # add_image and the catalog writes queue their cache work; without a worker
     # running, this script is the one that has to drain it.
