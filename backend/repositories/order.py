@@ -78,6 +78,7 @@ from models.orders import Order
 from models.product_translations import ProductTranslation
 from models.product_variants import ProductVariant
 from models.products import Product
+from repositories.pricing import price_basket
 from schema.order import order_create_request
 from services import identity
 
@@ -389,6 +390,17 @@ def _build_lines(db: Session, cart: Cart, locale: str) -> list[dict]:
     if not cart_items:
         raise HTTPException(status_code=400, detail="cart is empty")
 
+    # Priced once for the whole basket, through the same function the cart
+    # calls. BOGO ranks units across lines, so it cannot be decided one line at
+    # a time -- and pricing the basket twice, once here and once there, is the
+    # defect this shared call exists to prevent.
+    basket_variants = []
+    for item in cart_items:
+        variant = db.get(ProductVariant, item.variant_id)
+        if variant is not None:
+            basket_variants.append((variant, item.quantity))
+    priced_lines = {line.variant_id: line for line in price_basket(db, basket_variants)}
+
     lines: list[dict] = []
     for line_number, item in enumerate(cart_items, start=1):
         variant = db.get(ProductVariant, item.variant_id)
@@ -435,9 +447,13 @@ def _build_lines(db: Session, cart: Cart, locale: str) -> list[dict]:
             attributes.setdefault("size_system", variant.size_system)
 
         quantity = item.quantity
-        line_subtotal = (live_price * quantity).quantize(CENT)
-        discount_amount = Decimal("0.00")
-        line_total = (line_subtotal - discount_amount).quantize(CENT)
+        # From repositories/pricing.py, the same call the cart makes. Computed
+        # once for the whole basket above, because BOGO ranks units across
+        # lines and cannot be decided one line at a time.
+        priced = priced_lines[variant.id]
+        line_subtotal = priced.line_subtotal
+        discount_amount = priced.discount_amount
+        line_total = priced.line_total
 
         has_cost = variant.cost is not None
         unit_cogs = _money(variant.cost) if has_cost else None
@@ -458,10 +474,12 @@ def _build_lines(db: Session, cart: Cart, locale: str) -> list[dict]:
                 "product_url": f"/{locale}/products/{slug}",
                 "item_list_id": item.added_from_list_id,
                 "item_list_name": item.added_from_list_name,
-                "unit_list_price": _money(variant.price),
-                "unit_price": live_price,
+                "unit_list_price": priced.unit_list_price,
+                "unit_price": priced.unit_price,
                 "quantity": quantity,
                 "discount_amount": discount_amount,
+                "promotion_id": priced.promotion_id,
+                "discount_source": priced.discount_source,
                 "coupon_code": item.item_coupon_code,
                 "line_subtotal": line_subtotal,
                 "tax_amount": Decimal("0.00"),
@@ -523,6 +541,7 @@ def _order_payload(db: Session, order: Order) -> dict:
         "total": num(order.total),
         "gross_order_value": num(order.gross_order_value),
         "items_cogs_total": num(order.items_cogs_total),
+        "promotion_cost_total": num(order.promotion_cost_total),
         "coupon_code": order.coupon_code,
         "payment_status": enum_value(order.payment_status),
         "payment_method": enum_value(order.payment_method),
@@ -556,6 +575,8 @@ def _order_payload(db: Session, order: Order) -> dict:
                 "unit_cogs": num(i.unit_cogs),
                 "line_cogs": num(i.line_cogs),
                 "cogs_snapshot_source": i.cogs_snapshot_source,
+                "promotion_id": i.promotion_id,
+                "discount_source": enum_value(i.discount_source),
             }
             for i in items
         ],
@@ -662,10 +683,25 @@ def _create(
         .where(Order.customer_id == customer.id)
     ).scalar_one()
 
+    # line_subtotal is already at the catalogue price, markdown included, so the
+    # discount subtracted here is the PROMOTION saving only. Subtracting
+    # cart.discount_total instead double-counted the markdown and undercharged
+    # every marked-down order -- the cart displayed one total and checkout took
+    # a smaller one.
     subtotal = sum((line["line_subtotal"] for line in lines), Decimal("0.00")).quantize(
         CENT
     )
-    discount = _money(cart.discount_total)
+    discount = sum(
+        (line["discount_amount"] for line in lines), Decimal("0.00")
+    ).quantize(CENT)
+    promotion_cost = sum(
+        (
+            line["discount_amount"]
+            for line in lines
+            if line["discount_source"] == "promotion"
+        ),
+        Decimal("0.00"),
+    ).quantize(CENT)
     if discount > subtotal:
         raise HTTPException(status_code=409, detail="cart discount exceeds subtotal")
     # S1 has no shipping-rate engine: quoting arrives with the courier adapter in
@@ -714,6 +750,10 @@ def _create(
         cod_amount=total if is_cod else None,
         cod_collection_status=CodCollectionStatus.pending if is_cod else None,
         items_cogs_total=items_cogs_total,
+        # Section 4.4: only the promotion half of the saving is campaign cost.
+        # A markdown stays visible as unit_list_price - unit_price and is
+        # deliberately not counted here.
+        promotion_cost_total=promotion_cost,
         is_new_customer=prior_orders == 0,
         business_date=_business_date(db),
         placed_at=now,

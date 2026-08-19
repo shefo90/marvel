@@ -18,18 +18,20 @@ from sqlalchemy import (
     BigInteger,
     CheckConstraint,
     DateTime,
+    Enum as SAEnum,
     ForeignKey,
     ForeignKeyConstraint,
+    func,
     Index,
     Integer,
     Numeric,
     String,
     UniqueConstraint,
-    func,
 )
 from sqlalchemy.orm import mapped_column, relationship
 
 from core.db import Base
+from core.enums import DiscountSource
 from models.mixins import TimestampMixin
 
 
@@ -57,6 +59,19 @@ class CartItem(Base, TimestampMixin):
     added_from_list_name = mapped_column(String(160), nullable=True)
     added_from_index = mapped_column(Integer, nullable=True)
     item_coupon_code = mapped_column(String(64), nullable=True)
+
+    # Section 4.4 attribution. Which offer priced this line, how much it took
+    # off, and which mechanism it was -- a markdown is not a campaign cost, and
+    # only the promotion rows feed orders.promotion_cost_total.
+    promotion_id = mapped_column(
+        BigInteger, ForeignKey("promotions.id", ondelete="SET NULL"), nullable=True
+    )
+    discount_amount = mapped_column(
+        Numeric(12, 2), nullable=False, server_default="0"
+    )
+    discount_source = mapped_column(
+        SAEnum(DiscountSource, native_enum=False, length=16), nullable=True
+    )
 
     cart = relationship("Cart", back_populates="items")
     variant = relationship(

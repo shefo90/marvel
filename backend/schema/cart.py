@@ -128,6 +128,10 @@ class cart_item_response(BaseModel):
     unit_price_effective: Decimal
     line_total: Decimal
     line_discount: Decimal
+    # Which offer priced this line, if any. The storefront needs it to say
+    # "Eid 20% off" beside a price rather than an unexplained number.
+    promotion_id: int | None = None
+    discount_source: str | None = None
 
     price_snapshot_at: datetime
     last_repriced_at: datetime | None = None

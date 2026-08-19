@@ -109,6 +109,43 @@ class AuditAction(str, Enum):
     delete = "delete"
 
 
+class PromotionType(str, Enum):
+    """Section 4 of the admin design. No stacking, no priority, no tiers.
+
+    ``bogo`` is the only one that reasons across a whole line rather than a
+    single unit, which is why pricing evaluates it separately.
+    """
+
+    percentage = "percentage"
+    fixed = "fixed"
+    bogo = "bogo"
+
+
+class PromotionTargetType(str, Enum):
+    """What a promotion applies to. ``all`` must be chosen explicitly -- a
+    promotion with no targets applies to nothing, so a half-saved offer cannot
+    mark the whole catalogue down."""
+
+    all = "all"
+    product = "product"
+    variant = "variant"
+    category = "category"
+    collection = "collection"
+
+
+class DiscountSource(str, Enum):
+    """Which mechanism produced a line's discount.
+
+    The distinction is a reporting one and it matters: a markdown is not a
+    campaign cost. ``orders.promotion_cost_total`` sums only the ``promotion``
+    rows, while a ``sale_price`` markdown stays visible as
+    unit_list_price - unit_price without being counted as spend.
+    """
+
+    sale_price = "sale_price"
+    promotion = "promotion"
+
+
 class ProductStatus(str, Enum):
     draft = "draft"
     active = "active"

@@ -353,3 +353,190 @@ def test_cod_order_sets_cod_fields(client):
         assert order.gross_order_value == order.total
     finally:
         session.close()
+
+
+# --- One pricing implementation (admin stage 3) -----------------------------
+#
+# services/identity.py's docstring records what happens when one rule has two
+# implementations: registration and checkout normalized a shopper differently,
+# one person became two customers rows, and every lifetime-value figure was
+# wrong while each individual test passed. Pricing is the same shape -- the cart
+# shows a number and checkout charges a different one -- so these assert the two
+# agree on the same basket.
+
+
+@pytest.fixture
+def marked_down_sku():
+    """A seeded variant marked down for the duration of one test.
+
+    Created rather than looked for: the seed catalog has no sale price, and a
+    test that skips when the condition is absent proves nothing on the day the
+    condition matters. The original value is restored afterwards.
+    """
+    from decimal import Decimal
+
+    from sqlalchemy import select
+
+    from core.db import SessionLocal
+    from models.product_variants import ProductVariant
+
+    db = SessionLocal()
+    try:
+        variant = db.execute(
+            select(ProductVariant)
+            .where(ProductVariant.is_active.is_(True), ProductVariant.price > 100)
+            .order_by(ProductVariant.id)
+            .limit(1)
+        ).scalar_one()
+        variant_id = variant.id
+        sku = variant.sku
+        original = variant.sale_price
+        variant.sale_price = (Decimal(str(variant.price)) - Decimal("100.00"))
+        db.commit()
+    finally:
+        db.close()
+
+    yield sku
+
+    db = SessionLocal()
+    try:
+        variant = db.get(ProductVariant, variant_id)
+        variant.sale_price = original
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_checkout_charges_what_the_cart_showed(client, marked_down_sku):
+    """The number the shopper agreed to is the number they are charged.
+
+    This is the defect a shared implementation exists to prevent, and it was
+    real: the order path subtracted cart.discount_total from a subtotal whose
+    lines were already priced at the sale price, charging a marked-down item
+    less than the cart ever displayed.
+    """
+    sku = marked_down_sku
+    token = _new_cart(client)
+    _add_item(client, token, sku, quantity=2)
+    cart = client.get("/api/en/cart", headers={"X-Cart-Token": token}).json()
+
+    contact = _unique_contact()
+    placed = _place(client, token, uuid.uuid4().hex, contact)
+
+    assert placed.status_code == 201, placed.text
+    assert placed.json()["total"] == cart["total"]
+
+
+def test_an_order_line_records_where_its_discount_came_from(client, marked_down_sku):
+    """A markdown is not a campaign cost. discount_source distinguishes them,
+    and orders.promotion_cost_total counts only the promotion ones."""
+    sku = marked_down_sku
+    token = _new_cart(client)
+    _add_item(client, token, sku, quantity=1)
+    contact = _unique_contact()
+
+    placed = _place(client, token, uuid.uuid4().hex, contact)
+
+    assert placed.status_code == 201, placed.text
+    line = next(item for item in placed.json()["items"] if item["sku"] == sku)
+    assert line["discount_source"] == "sale_price"
+    assert line["promotion_id"] is None
+    # The markdown shows as the gap between list and paid, not as a discount.
+    assert float(line["unit_list_price"]) > float(line["unit_price"])
+    assert float(line["discount_amount"]) == 0.0
+
+
+def test_a_marked_down_order_reports_no_promotion_cost(client, marked_down_sku):
+    sku = marked_down_sku
+    token = _new_cart(client)
+    _add_item(client, token, sku, quantity=1)
+    contact = _unique_contact()
+
+    placed = _place(client, token, uuid.uuid4().hex, contact)
+
+    assert placed.status_code == 201, placed.text
+    assert float(placed.json()["promotion_cost_total"]) == 0.0
+
+
+@pytest.fixture
+def live_promotion():
+    """A 20%-off-everything promotion, live for the duration of one test."""
+    from decimal import Decimal
+
+    from core.db import SessionLocal
+    from models.promotion_targets import PromotionTarget
+    from models.promotions import Promotion
+
+    db = SessionLocal()
+    try:
+        promotion = Promotion(
+            name="Test 20% off", type="percentage",
+            discount_percent=Decimal("20.00"), is_active=True,
+        )
+        db.add(promotion)
+        db.flush()
+        db.add(PromotionTarget(
+            promotion_id=promotion.id, target_type="all", target_id=None
+        ))
+        db.commit()
+        promotion_id = promotion.id
+    finally:
+        db.close()
+
+    yield promotion_id
+
+    db = SessionLocal()
+    try:
+        # order_items.promotion_id is ON DELETE SET NULL, so an order placed
+        # during the test survives this with its money intact and only loses the
+        # pointer to a campaign that no longer exists.
+        promotion = db.get(Promotion, promotion_id)
+        if promotion is not None:
+            db.delete(promotion)
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_a_live_promotion_prices_the_cart(client, live_promotion):
+    sku = _first_sku(client)
+    token = _new_cart(client)
+    _add_item(client, token, sku, quantity=1)
+
+    cart = client.get("/api/en/cart", headers={"X-Cart-Token": token}).json()
+
+    line = cart["items"][0]
+    assert float(cart["discount_total"]) > 0
+    assert float(line["line_total"]) < float(line["unit_price_snapshot"]) * line["quantity"]
+
+
+def test_a_promoted_basket_is_charged_what_the_cart_showed(client, live_promotion):
+    """The parity that matters, with a promotion in play rather than a
+    markdown."""
+    sku = _first_sku(client)
+    token = _new_cart(client)
+    _add_item(client, token, sku, quantity=2)
+    cart = client.get("/api/en/cart", headers={"X-Cart-Token": token}).json()
+
+    placed = _place(client, token, uuid.uuid4().hex, _unique_contact())
+
+    assert placed.status_code == 201, placed.text
+    assert placed.json()["total"] == cart["total"]
+
+
+def test_a_promoted_order_records_the_campaign_and_its_cost(client, live_promotion):
+    """Section 11A: promotion_cost_total must be auditable, which means the
+    line has to say which promotion produced it."""
+    sku = _first_sku(client)
+    token = _new_cart(client)
+    _add_item(client, token, sku, quantity=1)
+
+    placed = _place(client, token, uuid.uuid4().hex, _unique_contact())
+
+    assert placed.status_code == 201, placed.text
+    body = placed.json()
+    line = body["items"][0]
+    assert line["promotion_id"] == live_promotion
+    assert line["discount_source"] == "promotion"
+    assert float(line["discount_amount"]) > 0
+    assert float(body["promotion_cost_total"]) == float(line["discount_amount"])

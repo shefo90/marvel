@@ -24,6 +24,8 @@ from .product_variants import ProductVariant
 from .collections import Collection
 from .collection_products import CollectionProduct
 from .product_images import ProductImage
+from .promotions import Promotion
+from .promotion_targets import PromotionTarget
 from .attribute_values import AttributeValue
 
 # --- Catalog translations --------------------------------------------------
@@ -86,6 +88,8 @@ __all__ = [
     "Collection",
     "CollectionProduct",
     "ProductImage",
+    "Promotion",
+    "PromotionTarget",
     "AttributeValue",
     "ProductTranslation",
     "CategoryTranslation",
