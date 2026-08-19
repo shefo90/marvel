@@ -7,9 +7,13 @@ it('prices in EGP', () => {
   expect(money('500.00', 'en')).toMatch(/EGP|E£/);
 });
 
-it('uses Arabic digits for an Arabic reader', () => {
-  // An Egyptian reading the Arabic page expects ٥٠٠, not 500.
-  expect(money('500.00', 'ar')).toMatch(/[٠-٩]/);
+it('uses Western digits in Arabic too', () => {
+  // Section 6.6 is explicit: Western digits for prices, sizes, quantities,
+  // order IDs and SKUs in BOTH locales. ar-EG defaults to Arabic-Indic, so the
+  // numbering system has to be forced -- getting this wrong is invisible to an
+  // English-speaking reviewer and wrong on every Arabic page.
+  expect(money('500.00', 'ar')).toMatch(/500/);
+  expect(money('500.00', 'ar')).not.toMatch(/[٠-٩]/);
 });
 
 it('shows both prices only when there is a real markdown', () => {

@@ -66,7 +66,11 @@ export default function CartPage() {
               <li key={item.variant_id} className={styles.line}>
                 <div className={styles.lineMain}>
                   <span className={styles.title}>{item.title}</span>
-                  <span className={styles.sku}>{item.sku}</span>
+                  {/* Same rule as the order number: a SKU is Latin in both
+                      languages and must not be reordered by its neighbours. */}
+                  <span className={styles.sku}>
+                    <bdi>{item.sku}</bdi>
+                  </span>
                   {/* The cart holds a price snapshot; the catalogue may have
                       moved since. Saying so beats silently repricing. */}
                   {item.price_changed ? (

@@ -36,7 +36,12 @@ export default function OrderPage() {
       <h1>{copy.heading}</h1>
 
       <p>{copy.numberLabel}</p>
-      <p className={styles.number}>{orderNumber}</p>
+      {/* <bdi>, per section 6.7: an order number is Latin whatever the page
+          language is, and without isolation the bidi algorithm reorders it
+          against the Arabic around it. */}
+      <p className={styles.number}>
+        <bdi>{orderNumber}</bdi>
+      </p>
 
       <p className={styles.note}>{copy.note}</p>
       <p className={styles.note}>{copy.cod}</p>

@@ -1,11 +1,15 @@
 import { DEFAULT_LOCALE } from './locales.js';
 
 /**
- * Money, in EGP, in the reader's language.
+ * Money, in EGP, with Latin digits in both languages.
  *
- * Egypt and EGP only — a locked decision, not a placeholder — so there is no
- * currency argument. Arabic gets Arabic-Indic digits from Intl, which is what
- * an Egyptian reader expects to see on a price.
+ * Section 6.6 requires Western digits for prices, sizes, quantities, order IDs
+ * and SKUs in BOTH locales, and ar-EG defaults to Arabic-Indic — so the
+ * numbering system is forced rather than left to the locale. The same rule is
+ * why formatted numerals never reach analytics: dataLayer values carry raw
+ * numbers.
+ *
+ * Egypt and EGP only, a locked decision, so there is no currency argument.
  */
 export function money(amount, locale = DEFAULT_LOCALE) {
   const value = Number(amount ?? 0);
@@ -13,6 +17,7 @@ export function money(amount, locale = DEFAULT_LOCALE) {
     style: 'currency',
     currency: 'EGP',
     minimumFractionDigits: 2,
+    numberingSystem: 'latn',
   }).format(value);
 }
 

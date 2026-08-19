@@ -40,7 +40,11 @@ export default function Header() {
                   {localeOf(code).native}
                 </span>
               ) : (
-                <a href={switchTo(code)} hrefLang={code}>
+                /* rel=external keeps Vike's client router out of this link,
+                   so switching language is a FULL navigation and the server
+                   re-renders <html lang/dir>. Section 6.7 requires exactly
+                   that: never an in-page re-render or a runtime RTL pass. */
+                <a href={switchTo(code)} hrefLang={code} rel="external">
                   {localeOf(code).native}
                 </a>
               )}

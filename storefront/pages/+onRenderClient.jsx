@@ -1,7 +1,6 @@
 import { hydrateRoot } from 'react-dom/client';
 
 import Layout from '../layouts/LayoutDefault.jsx';
-import { localeOf } from '../utils/locales.js';
 import '../assets/styles/main.scss';
 
 let root;
@@ -9,17 +8,16 @@ let root;
 /**
  * Hydration, and client-side navigation after it.
  *
- * The <html> attributes are updated on every navigation because switching
- * language is a route change, not a reload — without this, moving from the
- * English page to the Arabic one would leave the document declaring itself
- * left-to-right English.
+ * Deliberately does NOT touch <html lang> or <html dir>. Section 6.7 bans
+ * client-side assignment of them and makes locale switching a full navigation,
+ * so the server document template owns both and they can never disagree with
+ * the URL. The language links carry rel="external" to force that full load.
+ *
+ * The title still updates, because a client-side navigation within one locale
+ * genuinely changes the page.
  */
 export default function onRenderClient(pageContext) {
   const { Page, data } = pageContext;
-  const locale = data?.locale ?? pageContext.routeParams?.locale ?? 'en';
-  const { code, dir } = localeOf(locale);
-  document.documentElement.lang = code;
-  document.documentElement.dir = dir;
   if (data?.head?.title) document.title = data.head.title;
 
   const page = (

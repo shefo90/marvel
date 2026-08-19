@@ -62,3 +62,14 @@ it('shows no count at all for an empty cart', async () => {
 
   expect(screen.queryByText('0')).not.toBeInTheDocument();
 });
+
+it('makes switching language a full navigation, not a client-side re-render', async () => {
+  // Section 6.7: locale switching is a full navigation, and the server owns
+  // <html lang/dir>. rel="external" is what keeps Vike's client router out of
+  // the link -- without it the document would keep the previous language's
+  // direction while showing the other language's words.
+  serveCart();
+  renderAt(<Header />, { locale: 'en', pathname: '/en' });
+
+  expect(screen.getByRole('link', { name: 'العربية' })).toHaveAttribute('rel', 'external');
+});
