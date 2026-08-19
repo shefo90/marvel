@@ -15,6 +15,17 @@ body {
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+
+  // Lets a section break out to the full viewport width with
+  // `margin-inline: calc(50% - 50vw)` without the 100vw creating a horizontal
+  // scrollbar. It belongs on body, NOT on the width-constrained `.page`: an
+  // overflow value there establishes a clipping box at that element's edges, so
+  // it cuts the break-out off instead of containing it — which clipped the
+  // hero's own headline off the side of the page.
+  //
+  // `clip` rather than `hidden`: `hidden` on an ancestor silently disables the
+  // header's position: sticky.
+  overflow-x: clip;
 }
 
 // Arabic needs more room between lines than Latin at the same size: the script
@@ -32,12 +43,6 @@ a, button { @include m.focus-ring; }
   @include m.page-width;
   padding-block: v.$space-lg v.$space-2xl;
   min-height: 60vh;
-
-  // Lets a section break out to the full viewport width with
-  // `margin-inline: calc(50% - 50vw)` without the 100vw creating a horizontal
-  // scrollbar. `clip` rather than `hidden` on purpose: `hidden` on an ancestor
-  // silently disables the header's position: sticky.
-  overflow-x: clip;
 }
 
 // Visible only when focused: the first thing a keyboard user reaches, and

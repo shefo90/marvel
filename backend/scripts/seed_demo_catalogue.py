@@ -63,6 +63,17 @@ SWATCH = {
     "green": (74, 96, 74), "gold": (186, 154, 84), "silver": (186, 186, 190),
 }
 
+# seed.py's products, which predate this script. (slug, label, silhouette)
+LEGACY_SEED = [
+    ("leather-strap-sandal", "Leather Strap Sandal", "shoe"),
+    ("woven-flat-sandal", "Woven Flat Sandal", "shoe"),
+]
+
+# Which silhouette a product's placeholder gets drawn with.
+BAG_CATEGORIES = {
+    "handbags", "crossbody", "shoulder", "beach-bags", "clutches", "wallets",
+}
+
 # (slug, English, Arabic, price, sale price or None, sizes, colours)
 CATALOGUE = {
     "sandals": [
@@ -152,27 +163,76 @@ COLLECTION_MEMBERS = {
 }
 
 
-def placeholder(text: str, color_code: str, *, variant: int) -> bytes:
-    """A tinted panel carrying the product's name. Deliberately obviously not a
-    photograph, so nobody mistakes seeded data for the real catalogue."""
-    tint = SWATCH.get(color_code, (150, 150, 150))
-    # The second image is a shade off the first, so the card's hover swap is
-    # visibly a swap rather than looking like a rendering glitch.
-    if variant:
-        tint = tuple(min(255, channel + 26) for channel in tint)
-
-    image = Image.new("RGB", (1200, 1500), tint)
+def _gradient(size, top, bottom):
+    """A soft vertical wash, drawn a row at a time."""
+    width, height = size
+    image = Image.new("RGB", size, top)
     draw = ImageDraw.Draw(image)
-    luminance = (tint[0] * 299 + tint[1] * 587 + tint[2] * 114) / 1000
-    ink = (24, 24, 24) if luminance > 140 else (245, 245, 245)
+    for y in range(height):
+        t = y / max(1, height - 1)
+        draw.line(
+            [(0, y), (width, y)],
+            fill=tuple(round(top[i] + (bottom[i] - top[i]) * t) for i in range(3)),
+        )
+    return image
 
-    draw.rectangle([60, 60, 1140, 1440], outline=ink, width=3)
-    lines = [text[i:i + 18] for i in range(0, len(text), 18)]
-    y = 700 - (len(lines) * 22)
-    for line in lines:
-        draw.text((110, y), line, fill=ink)
-        y += 44
-    draw.text((110, 1360), f"{color_code.upper()} - PLACEHOLDER", fill=ink)
+
+def _shoe(draw, tint, shade):
+    """A side-on heel. Enough shape to read as footwear at thumbnail size."""
+    draw.polygon(
+        [(300, 980), (880, 980), (900, 900), (760, 860), (600, 700),
+         (430, 690), (330, 780)],
+        fill=tint,
+    )
+    draw.polygon([(300, 980), (880, 980), (880, 1010), (300, 1010)], fill=shade)
+    # The heel.
+    draw.polygon([(800, 1010), (860, 1010), (830, 1200), (790, 1200)], fill=shade)
+    draw.ellipse([(430, 660), (630, 740)], fill=shade)
+
+
+def _bag(draw, tint, shade):
+    """A tote: trapezoid body, two handles, a band across the front."""
+    draw.polygon([(360, 720), (840, 720), (890, 1180), (310, 1180)], fill=tint)
+    draw.rectangle([(310, 920), (890, 985)], fill=shade)
+    for offset in (0, 1):
+        cx = 480 + offset * 240
+        draw.arc([(cx - 90, 560), (cx + 90, 800)], start=180, end=360,
+                 fill=shade, width=26)
+
+
+def placeholder(text: str, color_code: str, *, variant: int, kind: str = "shoe") -> bytes:
+    """A drawn stand-in for a product photograph.
+
+    Flat colour panels were technically images and read as missing ones -- a
+    grid of them looks like a page that failed to load, which is the opposite of
+    what a placeholder should communicate. This draws a silhouette on a lit
+    background instead, so a section reads as "products here, photography
+    pending" rather than "broken".
+
+    Still deliberately not photographic. Nobody should mistake seeded data for
+    the real catalogue, and every one of these is replaced the moment a real
+    photograph is uploaded through the admin.
+    """
+    tint = SWATCH.get(color_code, (150, 150, 150))
+    # The second image is lit differently, so the card's hover swap is visibly a
+    # swap rather than looking like a rendering glitch.
+    top = (250, 247, 242) if not variant else (243, 236, 228)
+    bottom = (232, 224, 214) if not variant else (222, 212, 200)
+
+    image = _gradient((1200, 1500), top, bottom)
+    draw = ImageDraw.Draw(image)
+
+    shade = tuple(max(0, channel - 34) for channel in tint)
+    # A contact shadow, so the silhouette sits on the surface rather than
+    # floating on it.
+    draw.ellipse([(300, 1150), (900, 1260)], fill=(214, 206, 196))
+
+    if kind == "bag":
+        _bag(draw, tint, shade)
+    else:
+        _shoe(draw, tint, shade)
+
+    draw.text((72, 1420), f"{text} · placeholder", fill=(120, 112, 104))
 
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
@@ -227,10 +287,11 @@ def build(staff, category: Category, spec) -> Product:
             "meta_description": title,
         })
 
+    kind = "bag" if category.slug in BAG_CATEGORIES else "shoe"
     for index in range(2):
         add_image(
             db, staff, product.id,
-            data=placeholder(english, colors[0], variant=index),
+            data=placeholder(english, colors[0], variant=index, kind=kind),
             filename=f"{slug}-{index}.png",
             alt_text=f"{english} in {colors[0]}",
         )
@@ -304,6 +365,68 @@ def repair_external_images(staff) -> int:
     return repaired
 
 
+def regenerate_placeholders(staff) -> int:
+    """Redraw every seeded product's artwork with the current generator.
+
+    Run when the drawing changes. Only products this script owns are touched --
+    anything with a photograph an operator uploaded is matched by slug and left
+    alone, because it is not in CATALOGUE.
+    """
+    owned = {slug for specs in CATALOGUE.values() for (slug, *_rest) in specs}
+    redrawn = 0
+
+    # seed.py's two products are older than this script and carry the same kind
+    # of generated stand-in, so they are redrawn too -- one of them is the first
+    # product in `sandals`, which means the Shoes tile and the hero both borrow
+    # from it. Anything else an operator has created is deliberately untouched.
+    for slug, english, kind in LEGACY_SEED:
+        product = db.execute(
+            select(Product).where(Product.slug == slug)
+        ).scalar_one_or_none()
+        if product is None:
+            continue
+        for image in db.execute(
+            select(ProductImage).where(ProductImage.product_id == product.id)
+        ).scalars().all():
+            db.delete(image)
+        db.flush()
+        for index in range(2):
+            add_image(
+                db, staff, product.id,
+                data=placeholder(english, "beige", variant=index, kind=kind),
+                filename=f"{slug}-{index}.png",
+                alt_text=english,
+            )
+        redrawn += 1
+
+    for category_slug, specs in CATALOGUE.items():
+        kind = "bag" if category_slug in BAG_CATEGORIES else "shoe"
+        for slug, english, _ar, _price, _sale, _sizes, colors in specs:
+            if slug not in owned:
+                continue
+            product = db.execute(
+                select(Product).where(Product.slug == slug)
+            ).scalar_one_or_none()
+            if product is None:
+                continue
+
+            for image in db.execute(
+                select(ProductImage).where(ProductImage.product_id == product.id)
+            ).scalars().all():
+                db.delete(image)
+            db.flush()
+
+            for index in range(2):
+                add_image(
+                    db, staff, product.id,
+                    data=placeholder(english, colors[0], variant=index, kind=kind),
+                    filename=f"{slug}-{index}.png",
+                    alt_text=f"{english} in {colors[0]}",
+                )
+            redrawn += 1
+    return redrawn
+
+
 def main() -> None:
     staff = actor()
     created = 0
@@ -326,6 +449,9 @@ def main() -> None:
                 skipped += 1
 
     joined = join_collections()
+    redrawn = regenerate_placeholders(staff)
+    if redrawn:
+        print(f"placeholder artwork redrawn: {redrawn} products")
     repaired = repair_external_images(staff)
     if repaired:
         print(f"\nimage rows repointed from an unreachable host: {repaired}")

@@ -12,11 +12,28 @@
   backdrop-filter: blur(10px);
 }
 
+// The two things a first-time Egyptian shopper most needs to know, before they
+// have scrolled anything. Static text, not a rotating carousel: a message that
+// moves is a message half of them will miss.
+.announce {
+  margin: 0;
+  background: v.$night;
+  color: rgba(246, 241, 234, 0.88);
+  text-align: center;
+  font-size: v.$text-xs;
+  letter-spacing: 0.06em;
+  padding: 7px v.$space-md;
+}
+
+// Three tracks, not flex: the brand and the tail size to their content and the
+// nav takes the middle, so the nav stays optically centred no matter how long
+// the cart label or the language names get in either script.
 .bar {
   @include m.page-width;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: v.$space-xl;
+  gap: v.$space-lg;
   min-height: 68px;
 }
 
@@ -34,7 +51,8 @@
 
 .topLevel {
   display: flex;
-  gap: v.$space-lg;
+  justify-content: center;
+  gap: v.$space-xl;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -151,26 +169,31 @@
 .cart {
   color: v.$ink;
   text-decoration: none;
-  font-weight: 600;
-  font-size: v.$text-sm;
-  letter-spacing: 0.02em;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  position: relative;
+
+  &:hover { color: v.$accent-ink; }
 }
 
+.cartGlyph { display: inline-flex; }
+
+// Always rendered, including at zero. A badge that appears only once something
+// is in the basket makes the control move the first time a shopper adds
+// anything, right at the moment they are looking somewhere else.
 .count {
-  background: v.$accent;
+  background: v.$ink;
   color: #fff;
   border-radius: v.$radius-pill;
-  min-width: 20px;
-  height: 20px;
+  min-width: 18px;
+  height: 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: v.$text-xs;
+  font-size: 10px;
   font-weight: 700;
-  padding: 0 6px;
+  padding: 0 5px;
 }
 
 @media (max-width: 760px) {

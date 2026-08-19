@@ -5,10 +5,23 @@ import { LOCALE_CODES, localeOf } from '../../../utils/locales.js';
 import styles from './Header.module.scss';
 
 const COPY = {
-  en: { shop: 'Shop', cart: 'Cart', brand: 'Marvel', menu: 'Categories', all: 'View all' },
+  en: {
+    shop: 'Shop',
+    cart: 'Cart',
+    brand: 'Marvel',
+    menu: 'Categories',
+    all: 'View all',
+    announce: 'Cash on delivery · Nationwide delivery across Egypt',
+    edits: 'Edits',
+  },
   ar: {
-    shop: 'المتجر', cart: 'السلة', brand: 'مارفل', menu: 'الأقسام',
+    shop: 'المتجر',
+    cart: 'السلة',
+    brand: 'مارفل',
+    menu: 'الأقسام',
     all: 'عرض الكل',
+    announce: 'الدفع عند الاستلام · توصيل لكل محافظات مصر',
+    edits: 'تشكيلات',
   },
 };
 
@@ -24,6 +37,10 @@ const COPY = {
  * focus, with no JavaScript deciding what is visible. That is what makes it
  * crawlable: a menu built from state renders empty in the initial HTML, so the
  * whole category tree would be invisible to the crawler that most needs it.
+ *
+ * There is deliberately no search, account or wishlist control here. None of
+ * those exist yet, and an icon that opens nothing is worse than an absent one —
+ * it reads as a broken shop rather than an unfinished one.
  */
 export default function Header() {
   const { locale, href, switchTo } = useLocale();
@@ -34,9 +51,12 @@ export default function Header() {
   // Supplied by each page's +data. Absent on a page that did not load it, in
   // which case the shop still works — it just navigates from the footer.
   const categories = pageContext?.data?.categories ?? [];
+  const collections = pageContext?.data?.collections ?? [];
 
   return (
     <header className={styles.header}>
+      <p className={styles.announce}>{copy.announce}</p>
+
       <div className={styles.bar}>
         <a className={styles.brand} href={href('/')}>
           {copy.brand}
@@ -71,6 +91,28 @@ export default function Header() {
                 ) : null}
               </li>
             ))}
+
+            {collections.length ? (
+              <li className={styles.topItem}>
+                <a
+                  className={styles.topLink}
+                  href={href(`/edit/${collections[0].slug}`)}
+                >
+                  {copy.edits}
+                </a>
+                <div className={styles.panel}>
+                  <ul className={styles.children}>
+                    {collections.map((collection) => (
+                      <li key={collection.id}>
+                        <a href={href(`/edit/${collection.slug}`)}>
+                          {collection.title}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </li>
+            ) : null}
           </ul>
         </nav>
 
@@ -96,8 +138,26 @@ export default function Header() {
           </ul>
 
           <a className={styles.cart} href={href('/cart')}>
-            {copy.cart}
-            {itemCount > 0 ? <span className={styles.count}>{itemCount}</span> : null}
+            <span aria-hidden="true" className={styles.cartGlyph}>
+              {/* Inline, not an icon font: one shape does not justify a webfont
+                  request, and an SVG scales with the text around it. */}
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
+                <path
+                  d="M4 7h16l-1.2 11.2a2 2 0 0 1-2 1.8H7.2a2 2 0 0 1-2-1.8L4 7Z"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M9 7V5.5a3 3 0 0 1 6 0V7"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </span>
+            <span className="visually-hidden">{copy.cart}</span>
+            <span className={styles.count}>{itemCount}</span>
           </a>
         </div>
       </div>

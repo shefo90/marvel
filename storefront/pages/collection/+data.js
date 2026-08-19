@@ -3,6 +3,7 @@ import { render } from 'vike/abort';
 import {
   getCollection,
   listCategories,
+  listCollections,
   listProducts,
 } from '../../services/catalog.service.js';
 import { publicOrigin } from '../../services/api.js';
@@ -54,10 +55,12 @@ export async function data(pageContext) {
 
   let collection = null;
   let categories = [];
+  let collections = [];
   try {
-    [collection, categories] = await Promise.all([
+    [collection, categories, collections] = await Promise.all([
       getCollection(locale, slug),
       listCategories(locale),
+      listCollections(locale).catch(() => []),
     ]);
   } catch (error) {
     if (error?.response?.status === 404) throw render(404);
@@ -84,6 +87,7 @@ export async function data(pageContext) {
     locale,
     collection,
     categories,
+    collections,
     listing,
     filters,
     copy,

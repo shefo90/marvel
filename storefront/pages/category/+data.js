@@ -3,6 +3,7 @@ import { render } from 'vike/abort';
 import {
   getCategory,
   listCategories,
+  listCollections,
   listProducts,
 } from '../../services/catalog.service.js';
 import { publicOrigin } from '../../services/api.js';
@@ -59,10 +60,12 @@ export async function data(pageContext) {
 
   let category = null;
   let categories = [];
+  let collections = [];
   try {
-    [category, categories] = await Promise.all([
+    [category, categories, collections] = await Promise.all([
       getCategory(locale, slug),
       listCategories(locale),
+      listCollections(locale).catch(() => []),
     ]);
   } catch (error) {
     // A 404 from the API is a category that does not exist in this language,
@@ -91,6 +94,7 @@ export async function data(pageContext) {
     locale,
     category,
     categories,
+    collections,
     listing,
     filters,
     copy,

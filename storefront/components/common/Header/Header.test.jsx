@@ -55,12 +55,18 @@ it('shows how many items are waiting once the cart loads', async () => {
   expect(await screen.findByText('3')).toBeInTheDocument();
 });
 
-it('shows no count at all for an empty cart', async () => {
-  // A "0" badge is visual noise that tells the shopper nothing.
+it('still shows the badge, at zero, for an empty cart', async () => {
+  // This reverses an earlier decision, which held that a "0" badge was visual
+  // noise telling the shopper nothing. It is noise -- but the alternative costs
+  // more: with no badge until the first add, the cart control changes width the
+  // moment something lands in it, and it does that while the shopper is looking
+  // at the product they just added rather than at the header. A control that
+  // moves under you reads as a glitch. Holding the space is the cheaper trade,
+  // and it matches what the shop is being built to resemble.
   serveCart();
   renderAt(<Header />);
 
-  expect(screen.queryByText('0')).not.toBeInTheDocument();
+  expect(await screen.findByText('0')).toBeInTheDocument();
 });
 
 it('makes switching language a full navigation, not a client-side re-render', async () => {
