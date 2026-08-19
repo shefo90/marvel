@@ -97,7 +97,7 @@ Then, in order: payment gateway → courier → S5 server measurement → S6 fee
 | Payment gateway | Which Egyptian provider (Paymob, Fawry, …) and its API keys |
 | Server measurement (S5) | GA4 property, Meta CAPI token, sGTM endpoint |
 | Courier adapter | Which courier (Bosta, Aramex, …) and credentials |
-| Storefront visual parity | Screenshots or a URL for pixishoes — "full parity, functionality *and* style" is agreed but nobody has seen the reference |
+| Storefront visual parity | **Reference given: <https://pixishoes.com/>.** See §7 — it is a Shopify store, and matching it is the same work as closing the product gap, not a skin on top of it. Still needed from the user: brand assets (logo, photography), the real category taxonomy, and whether this ranks ahead of payment |
 
 ---
 
@@ -185,14 +185,36 @@ server owning `<html lang/dir>`, and locale switching being a full navigation.
 
 ---
 
-## 7. The biggest product gap
+## 7. The biggest product gap — and the parity target
 
-The storefront has a **home listing and a product page**. There are no category pages, no collection
-pages, and **no search**. §5 requires a `search` event, and Arabic search needs the
+The storefront has **five pages**: home, product, cart, checkout, order. There are no category pages,
+no collection pages, and **no search**. §5 requires a `search` event, and Arabic search needs the
 alef/hamza/taa-marbuta folding and diacritic stripping that has been an open question since the
 2026-08-17 handoff — without it, Arabic site search returns wrong results.
 
 That is the largest remaining gap in the *product*, as opposed to the plumbing.
+
+**The parity reference is <https://pixishoes.com/>** (a Shopify store), given by the user on
+2026-08-19 after three handoffs carried it as "nobody has seen the reference". Read it before
+planning storefront work, because it settles the shape of the gap above:
+
+- It is **category-driven**. Two-tier nav — Shoes into seven types plus six themed collections, Bags
+  into six — and the homepage is a stack of merchandising sections (promo banners, lookbook, new
+  arrivals carousel, hero, then category grids for shoes and bags).
+- Collection pages carry **faceted filters** (availability, price, size, colour with 25+ values,
+  product type, tags) plus sorting and page-size controls, in a 4-column grid.
+- Product cards do far more than ours: hover swaps to an alternate image, colour swatches, an inline
+  size selector, add-to-cart from the grid, and badges (`New Arrival`, `-30%`, `Buy 1 Get 1`,
+  `TRENDING`).
+
+**Visual parity is therefore not a restyle.** Nothing in the storefront can display a category today,
+so "make it look like pixishoes" and "close the product gap" are one piece of work.
+
+Most of the schema is already there and unused: `collections` / `collection_products` /
+`collection_translations`, two-level `categories`, `attribute_values` for the colour and size facets,
+`promotions` with five target types for the badges, and ordered `product_images` for the hover swap.
+What has **no** schema at all is the wishlist, the lookbooks, and the newsletter — and there is no
+email system to send the newsletter with.
 
 ---
 
