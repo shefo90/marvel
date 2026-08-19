@@ -17,12 +17,17 @@ behind them.
 |---|---|
 | **S1 — commerce core** | Done. 46 tables, 4 migrations, catalog + auth + cart + idempotent orders |
 | **Admin stage 1 — catalog writes** | Done. Products, variants, per-language content, publish with structured blockers |
-| **Admin stage 4 — the UI** | Done for stage 1's surface. `admin/`, the first JavaScript in this repository |
-| **Admin stages 2 and 3** | Not started. Images, then offers (replacing S1b's promotions engine) |
+| **Admin stage 2 — images** | Done. Upload, decode-based validation, EXIF stripped, derivatives, content-addressed storage |
+| **Admin stage 3 — offers** | Done. `promotions`, one pricing implementation shared by cart and checkout, BOGO, attribution |
+| **Admin stage 4 — the UI** | Done. `admin/`, the first JavaScript in this repository |
 | **S2 — storefront & SEO** | Not started. Rendering decided: React SSR on Vite via Vike |
 | **S3–S7** | Not started |
 
-157 backend tests, 44 admin tests.
+267 backend tests, 65 admin tests. Five migrations.
+
+**Order management does not exist yet.** The role ladder reserves `operations` for orders,
+shipments and refunds, and no screen or endpoint covers it — an operator can build the catalogue
+but cannot see a single order.
 
 ## Running it
 
@@ -44,6 +49,10 @@ Seed some catalog data:
 ```bash
 docker compose exec api python scripts/seed.py
 ```
+
+**Back up the `marvel_media` volume.** Uploaded images are the only application state that is not
+in Postgres, so a database backup does not cover them. Losing that volume loses every product
+photo while the rows that point at them survive.
 
 ## Running it without Docker
 
@@ -187,6 +196,17 @@ admin/src/
   collation POSIX classes like `[[:alnum:]]` are ASCII-only — an allowlist rejects every Arabic slug.
   The failure is invisible when tested against a bound parameter rather than the column.
 - **Prices are VAT-inclusive**, so `orders.tax_total` stays 0 and VAT is derived for accounting.
+- **Pricing lives in exactly one place**, `repositories/pricing.py`, called by the cart and by
+  checkout. A second copy is how the cart shows one number and checkout charges another — which
+  had already happened: the order path subtracted the markdown twice and undercharged every
+  marked-down order until stage 3 unified the two.
+- **A markdown is not a campaign cost.** `unit_list_price - unit_price` is the markdown;
+  `discount_amount` is what a promotion took off on top of it, and only that feeds
+  `orders.promotion_cost_total`.
+- **A promotion with no targets applies to nothing.** Discounting the catalogue means choosing
+  `all` explicitly, so a half-saved offer cannot mark everything down.
+- **Uploaded images are identified by decoding them**, never by extension or declared content
+  type, and SVG is refused outright — it is XML that can carry script.
 
 ## Open questions
 
