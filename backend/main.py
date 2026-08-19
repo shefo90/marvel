@@ -8,7 +8,17 @@ from sqlalchemy import text
 
 from core.config import MEDIA_ROOT, MEDIA_URL_PREFIX
 from core.db import Engine
-from routes import admin_catalog, admin_images, auth, cart, order, product, refresh, register
+from routes import (
+    admin_catalog,
+    admin_images,
+    admin_promotions,
+    auth,
+    cart,
+    order,
+    product,
+    refresh,
+    register,
+)
 from services import cache
 
 
@@ -39,6 +49,7 @@ app = FastAPI(
 # a literal path and never offered to "/api/{locale}/..." as locale="admin".
 app.include_router(admin_catalog.router)
 app.include_router(admin_images.router)
+app.include_router(admin_promotions.router)
 
 # Uploaded imagery. Created on startup because StaticFiles refuses to mount a
 # directory that does not exist, and a fresh checkout has never uploaded

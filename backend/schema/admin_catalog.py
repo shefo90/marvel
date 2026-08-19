@@ -7,11 +7,18 @@ LookupError on every subsequent read of the row — the product becomes
 unloadable. Rejecting it at the boundary is the only place that costs nothing.
 """
 
+from datetime import datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
-from core.enums import AgeGroup, Gender, ProductCondition
+from core.enums import (
+    AgeGroup,
+    Gender,
+    ProductCondition,
+    PromotionTargetType,
+    PromotionType,
+)
 
 
 class translation_state(BaseModel):
@@ -173,6 +180,61 @@ class admin_variant_update(BaseModel):
     height_cm: Decimal | None = None
     merchant_eligible: bool | None = None
     is_active: bool | None = None
+
+
+class admin_promotion_target(BaseModel):
+    """``all`` covers the catalogue and takes no id; everything else needs one."""
+
+    target_type: PromotionTargetType
+    target_id: int | None = None
+
+
+class admin_promotion_target_row(admin_promotion_target):
+    id: int
+
+
+class admin_promotion_create(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    type: PromotionType
+    discount_percent: Decimal | None = Field(default=None, gt=0, le=100)
+    discount_amount: Decimal | None = Field(default=None, gt=0)
+    buy_quantity: int | None = Field(default=None, gt=0)
+    get_quantity: int | None = Field(default=None, gt=0)
+    get_discount_percent: Decimal | None = Field(default=None, gt=0, le=100)
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    is_active: bool = True
+    # Required at the boundary too: a promotion with no targets discounts
+    # nothing, and saving one is never what the operator meant.
+    targets: list[admin_promotion_target] = Field(min_length=1)
+
+
+class admin_promotion_update(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    discount_percent: Decimal | None = Field(default=None, gt=0, le=100)
+    discount_amount: Decimal | None = Field(default=None, gt=0)
+    buy_quantity: int | None = Field(default=None, gt=0)
+    get_quantity: int | None = Field(default=None, gt=0)
+    get_discount_percent: Decimal | None = Field(default=None, gt=0, le=100)
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    is_active: bool | None = None
+    targets: list[admin_promotion_target] | None = None
+
+
+class admin_promotion_row(BaseModel):
+    id: int
+    name: str
+    type: str
+    discount_percent: Decimal | None = None
+    discount_amount: Decimal | None = None
+    buy_quantity: int | None = None
+    get_quantity: int | None = None
+    get_discount_percent: Decimal | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    is_active: bool
+    targets: list[admin_promotion_target_row] = []
 
 
 class admin_image_row(BaseModel):
