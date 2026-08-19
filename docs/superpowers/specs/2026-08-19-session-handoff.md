@@ -12,11 +12,19 @@ open item is now closed.
 docker compose up -d redis        # or the test suite takes 255s instead of 20s
 
 cd backend
-.venv\Scripts\python -m pytest -q             # expect 305 passed
+.venv\Scripts\python -m pytest -q             # expect 345 passed
 .venv\Scripts\python -m uvicorn main:app --port 8000
 
 cd ../storefront && npm install && npm run dev   # http://localhost:3000
 cd ../admin      && npm install && npm run dev   # http://localhost:5173/admin/
+```
+
+There is a worker now. Nothing fails without it — the API never waits on it — but idle carts stop
+being marked abandoned and expired carts stop being expired:
+
+```bash
+cd backend
+.venv\Scripts\python -m workers.runner
 ```
 
 The admin needs a staff account; there is no registration screen:
@@ -37,10 +45,10 @@ gitignored, so a fresh worktree cannot run a single test. Use a branch.
 
 | | |
 |---|---|
-| **Branch** | `admin-ui` (41 commits ahead of `main`), stacked on `admin-catalog-writes` (17). Both pushed |
+| **Branch** | `admin-ui` (45 commits ahead of `main`), stacked on `admin-catalog-writes` (17). Both pushed |
 | **`main`** | `681779c` — has none of it |
-| **Tests** | **305 backend**, **70 admin**, **50 storefront**. All green, all builds clean |
-| **Migrations** | `0001`–`0005` on the local DB. **Compose (5433) is still at `0004`** — `docker compose up -d --build api` picks it up; a plain `restart` does not, because the image bakes the code in |
+| **Tests** | **345 backend**, **70 admin**, **50 storefront**. All green, all builds clean |
+| **Migrations** | `0001`–`0006` on the local DB. **Compose (5433) is still at `0004`** — `docker compose up -d --build api` picks it up; a plain `restart` does not, because the image bakes the code in |
 
 **A shopper can buy something.** Browse in Arabic or English, add to a cart, check out with cash on
 delivery; an operator sees the order and moves it along.
@@ -50,9 +58,10 @@ delivery; an operator sees the order and moves it along.
 | S1 commerce core | Done |
 | Admin stages 1–4 (catalog, images, offers, UI) | Done |
 | Order management | Done — the `operations` role, reserved since S1, is finally used |
+| Cart lifecycle | Done — carts are marked abandoned and expired for the first time |
 | S2 storefront & SEO | Done — SSR on Vike, bilingual, RTL, sitemaps, JSON-LD, hreflang |
 | S3 browser measurement | Done — dataLayer, GA4 ecommerce events, Consent Mode v2 |
-| S4 commerce integrations | **COD only.** No gateway, no courier, no background queue |
+| S4 commerce integrations | **COD only.** Background queue done. No gateway, no courier |
 | S5 server measurement | Not started |
 | S6 catalogs & BI | Not started |
 | S7 QA & handover | Not started |
@@ -61,16 +70,23 @@ delivery; an operator sees the order and moves it along.
 
 ## 3. What to do next
 
-**Do these three first. None of them needs anything from the user.**
+The two engineering items from this morning are done:
 
-1. **`_invalidate` runs before `db.commit()`** on every admin write path. This was deferred twice as
-   theoretical because nothing read the cache. **The storefront now reads it**, so a shopper can be
-   served a pre-commit price for up to `TTL_PRICING` (60s). It is a live bug as of today. The fix
-   restructures nine routes in `repositories/admin_catalog.py` and `admin_images.py`.
-2. **Background queue.** Small, additive — Redis is already in the stack — and S4, S5 and S6 all
-   wait on it. `workers/` + `tasks/` as top-level directories, following the layer-first convention.
-   Nothing else unblocks three slices for so little.
-3. **Merge.** Two stacked branches, 41 commits, neither on `main`. §8 has the URLs.
+- **`_invalidate` before `db.commit()`** — fixed. `services/cache_invalidation.py` queues cache work
+  against the session and runs it from SQLAlchemy's `after_commit`, discarding it on rollback. All
+  eleven call sites funnel through one `_invalidate`, so the nine catalog routes and five image ones
+  were one change. The regression test reads the product from a second connection at the moment the
+  invalidation fires; before the fix it saw the pre-edit row.
+- **Background queue** — done, as a Postgres outbox rather than a Redis list, with no queue library.
+  See §10.
+
+**What is left that needs nothing from the user:**
+
+1. **Merge.** Two stacked branches, 45 commits, neither on `main`. §8 has the URLs. This is now the
+   oldest thing on the list and the only one blocking nothing but itself.
+2. **Bump `catalog_updated_at` / `inventory_updated_at` / `content_updated_at` on write** — §6. Must
+   happen before S6 or the incremental feed silently skips every edited variant. It is also the last
+   cheap thing left.
 
 Then, in order: payment gateway → courier → S5 server measurement → S6 feeds → S7.
 
@@ -121,22 +137,26 @@ server owning `<html lang/dir>`, and locale switching being a full navigation.
 
 ---
 
-## 5. Two findings nobody has fixed
+## 5. Findings nobody has fixed
 
 - **Deleting an order is impossible** while a converted cart points at it.
   `ck_carts_converted_consistency` forbids `status='converted'` with a NULL `converted_order_id`, so
   the FK's `ON DELETE SET NULL` cannot fire. The README tells people to clean up test data by
   deleting the order — that path does not work. Move the cart out of `converted` first, or make the
   cart FK `ON DELETE CASCADE`.
-- **The dev database holds ~755 orders.** `test_cart_and_orders.py` places real orders over HTTP and
+- **The dev database holds ~860 orders.** `test_cart_and_orders.py` places real orders over HTTP and
   never cleans them up, so every suite run adds more. Harmless, but combined with the above it is
   awkward to clear.
+- **`delete_image` deletes the files before the transaction commits.** Same shape as the `_invalidate`
+  bug fixed today, and it is now the only instance left: if the commit fails the row survives and its
+  photograph does not. The fix is two lines — hand the storage deletes to
+  `services.cache_invalidation.on_commit`, which is not cache-specific despite the name. Noticed while
+  fixing the invalidation ordering; left alone rather than bundled into an unrelated commit.
 
 ---
 
 ## 6. Deferred, with the deadline that makes each one matter
 
-- **`_invalidate` before commit** — see §3. No longer deferrable.
 - **No write bumps `catalog_updated_at` / `inventory_updated_at` / `content_updated_at`.** They have
   `server_default` but no `onupdate` and no trigger. **Must be fixed before S6**, or the incremental
   feed silently skips every edited variant.
@@ -188,7 +208,47 @@ Stacked, so review and merge in that order. `gh` is not installed here and there
 
 ---
 
-## 9. Decisions the user still owes
+## 9. The background queue, in one page
+
+`backend/models/jobs.py` carries the full reasoning; this is what you need before touching it.
+
+**It is a table, not Redis, and that is the whole point.** `repositories.jobs.enqueue` writes the row
+on the *caller's* session and does not commit, so an order and the job that captures its payment
+commit together or roll back together. A broker cannot offer that — it is a second write to a second
+system, and everything between the two is a window where a crash loses the job silently.
+
+**No queue library.** With the table holding the work, the retry counters and the schedule, Celery or
+Dramatiq would duplicate all three somewhere else, and then there would be two places to look when a
+job is stuck. RQ was never an option anyway: it needs `os.fork` and does not run on Windows.
+
+Four things that will look wrong until you know why:
+
+- **There is no `done` status.** Success deletes the row. The table therefore holds only outstanding,
+  in-flight and dead work, stays small with no retention policy, and the dead-letter path is
+  `WHERE status = 'dead'`. It answers "what is broken", never "what ran last night".
+- **A claim is a lease, not a held transaction.** The handler runs on a *separate* session, because
+  the first real user of this queue is a payment capture and holding a transaction open across a
+  third-party HTTP call is how a slow gateway becomes a database outage. `reap_stalled` charges an
+  attempt when a lease expires, so a job that kills its worker dead-letters instead of taking down
+  every worker in turn.
+- **Every timestamp comes from the database clock**, never Python's. The API writes these rows and
+  the worker reads them; in a real deployment those are different hosts, and a few seconds of NTP
+  skew is enough to fire a retry early.
+- **Recurring work has no beat process.** Each tick schedules the next occurrence if none is
+  outstanding, and the partial unique index on `dedupe_key` means exactly one worker wins. The real
+  period is the interval plus at most one poll — fine for sweeps, wrong for anything needing a
+  precise wall-clock time, which is nothing so far.
+
+**Adding a job:** a handler in `tasks/`, decorated `@task("name")`, imported from `tasks/__init__.py`.
+It takes `(db, payload)`, returns nothing, must never commit, and **must be idempotent** — at-least-once
+is the only guarantee a queue with retries can give.
+
+`tests/test_worker.py` drives `run_once` directly; `main` is just a loop around it, so nothing in the
+suite sleeps or spawns a thread.
+
+---
+
+## 10. Decisions the user still owes
 
 Carried from earlier handoffs, none of them answered:
 
