@@ -5,6 +5,7 @@ import PageHeader from '../../components/common/PageHeader/PageHeader.jsx';
 import { useArchiveProduct, useProduct } from '../../hooks/useProduct.js';
 import BasicsTab from './BasicsTab.jsx';
 import ContentTab from './ContentTab.jsx';
+import ImagesTab from './ImagesTab.jsx';
 import VariantsTab from './VariantsTab.jsx';
 import styles from './ProductEdit.module.scss';
 
@@ -68,6 +69,11 @@ export default function ProductEdit() {
               key: 'content',
               label: 'Content',
               children: <ContentTab product={product} />,
+            },
+            {
+              key: 'images',
+              label: 'Images',
+              children: <ImagesTab product={product} />,
             },
             {
               key: 'variants',

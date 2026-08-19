@@ -69,3 +69,42 @@ export async function updateVariant(variantId, payload) {
   const response = await api.patch(`/admin/variants/${variantId}`, payload);
   return response.data;
 }
+
+export async function uploadImage(productId, { file, altText, variantId }) {
+  // FormData, and deliberately no explicit Content-Type: axios sets it with the
+  // multipart boundary, and setting it by hand loses the boundary and produces
+  // a request the server cannot parse.
+  const form = new FormData();
+  form.append('file', file);
+  form.append('alt_text', altText);
+  if (variantId != null) form.append('variant_id', String(variantId));
+
+  const response = await api.post(`/admin/products/${productId}/images`, form);
+  return response.data;
+}
+
+export async function setPrimaryImage(imageId) {
+  const response = await api.patch(`/admin/images/${imageId}/primary`);
+  return response.data;
+}
+
+export async function reorderImages(productId, imageIds, variantId = null) {
+  // The whole set, every time: the API refuses a partial list because the
+  // omitted rows would keep positions the new ones collide with.
+  const response = await api.put(`/admin/products/${productId}/images/order`, {
+    image_ids: imageIds,
+    variant_id: variantId,
+  });
+  return response.data;
+}
+
+export async function deleteImage(imageId) {
+  await api.delete(`/admin/images/${imageId}`);
+}
+
+export async function upsertImageAlt(imageId, locale, altText) {
+  const response = await api.put(`/admin/images/${imageId}/alt/${locale}`, {
+    alt_text: altText,
+  });
+  return response.data;
+}
