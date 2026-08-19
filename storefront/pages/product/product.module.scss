@@ -15,18 +15,30 @@
   display: flex;
   flex-direction: column;
   gap: v.$space-md;
+  align-items: flex-start;
 }
 
-.hero,
-.thumb {
+// A fixed ratio on both, so the frame is the same size whether the file
+// arrives, arrives late, or never arrives at all. Without it a missing image
+// collapses to nothing and a slow one shoves the whole page down when it lands.
+.hero {
   width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
   border-radius: v.$radius;
   background: v.$surface;
 }
 
 .thumb {
-  max-width: 180px;
+  width: 100%;
+  max-width: 160px;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: v.$radius;
+  background: v.$surface;
 }
+
+.gallery > .thumb + .thumb { margin-top: 0; }
 
 .detail {
   display: flex;

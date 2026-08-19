@@ -4,7 +4,7 @@ import { setupServer } from 'msw/node';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 
 import { renderAt } from '../../../test/render.jsx';
-import ProductImage from './ProductImage.jsx';
+import ProductImage, { alreadyFailed } from './ProductImage.jsx';
 
 // CartProvider fetches a cart on mount; nothing here cares about the result.
 const server = setupServer(
@@ -58,4 +58,24 @@ it('renders the same blank frame when there is no image at all', () => {
   const { container } = renderAt(<ProductImage image={null} />);
 
   expect(container.querySelector('div[aria-hidden="true"]')).toBeInTheDocument();
+});
+
+it('treats an image that already finished with no pixels as failed', () => {
+  // The case that actually matters. On a server-rendered page the request
+  // starts -- and fails -- before React hydrates, so the error event is gone
+  // by the time onError exists. Without this check the fallback works
+  // everywhere except a cold load.
+  expect(alreadyFailed({ complete: true, naturalWidth: 0 })).toBe(true);
+});
+
+it('does not call a loaded image failed', () => {
+  expect(alreadyFailed({ complete: true, naturalWidth: 1200 })).toBe(false);
+});
+
+it('does not call an image still loading failed', () => {
+  expect(alreadyFailed({ complete: false, naturalWidth: 0 })).toBe(false);
+});
+
+it('survives being asked about nothing', () => {
+  expect(alreadyFailed(null)).toBe(false);
 });
