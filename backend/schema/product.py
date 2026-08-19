@@ -58,6 +58,9 @@ class product_summary(BaseModel):
     title: str
     brand: str
     item_group_id: str
+    # GA4/Ads item_id for this row -- the cheapest active variant, whose price
+    # the row shows. None only when the product has no sellable variant.
+    sku: str | None = None
     price: Decimal | None = None
     sale_price: Decimal | None = None
     currency: str = "EGP"

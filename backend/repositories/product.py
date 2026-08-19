@@ -273,6 +273,13 @@ def list_products(
                     "title": tr.title,
                     "brand": product.brand,
                     "item_group_id": product.item_group_id,
+                    # The sellable identifier, and the same value GA4 and Ads
+                    # use (section 2). It is the CHEAPEST variant's SKU because
+                    # that is the variant whose price this row advertises --
+                    # any other would show one price and identify a different
+                    # item. Without it, view_item_list and select_item carry no
+                    # item_id and every join from impression to revenue breaks.
+                    "sku": cheapest.sku if cheapest else None,
                     "price": str(cheapest.price) if cheapest else None,
                     "sale_price": str(cheapest.sale_price)
                     if cheapest and cheapest.sale_price is not None

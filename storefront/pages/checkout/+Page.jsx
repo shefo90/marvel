@@ -3,6 +3,9 @@ import { navigate } from 'vike/client/router';
 
 import { useCart } from '../../hooks/useCart.jsx';
 import { useLocale } from '../../hooks/useLocale.jsx';
+import { useTrackOnce } from '../../hooks/useTrackEvent.js';
+import { pushEvent } from '../../services/dataLayer.js';
+import { beginCheckout, purchase } from '../../utils/events.js';
 import { clearCartToken } from '../../services/api.js';
 import { placeOrder } from '../../services/cart.service.js';
 import { money } from '../../utils/format.js';
@@ -30,6 +33,7 @@ const COPY = {
     placing: 'Placing your order…',
     empty: 'Your cart is empty.',
     required: 'Please fill in every required field.',
+    keepShopping: 'Continue shopping',
   },
   ar: {
     heading: 'إتمام الطلب',
@@ -52,6 +56,7 @@ const COPY = {
     placing: 'جارٍ تأكيد طلبك…',
     empty: 'سلتك فارغة.',
     required: 'يرجى ملء جميع الحقول المطلوبة.',
+    keepShopping: 'متابعة التسوق',
   },
 };
 
@@ -72,6 +77,10 @@ export default function CheckoutPage() {
   const [error, setError] = useState(null);
 
   const items = cart?.items ?? [];
+
+  // Keyed on the cart token, so returning to checkout with the same basket
+  // does not count as beginning again.
+  useTrackOnce(items.length > 0 ? cart?.token : null, () => beginCheckout(cart, { locale }));
 
   const onSubmit = async (event) => {
     event.preventDefault();
@@ -105,6 +114,12 @@ export default function CheckoutPage() {
         crypto.randomUUID(),
       );
 
+      // Fired before the cart is cleared and before navigating, so the event
+      // exists even if the shopper closes the tab on the confirmation page.
+      // transaction_id is the order number, which is what de-duplicates this
+      // against the server-side purchase S5 will send for the same order.
+      pushEvent(purchase(order, { locale }));
+
       // The cart became the order. Keeping the token would show the shopper a
       // basket that has already been bought.
       clearCartToken();
@@ -122,7 +137,7 @@ export default function CheckoutPage() {
       <>
         <h1>{copy.heading}</h1>
         <p>
-          {copy.empty} <a href={href('/')}>{COPY[locale]?.place ? '' : ''}</a>
+          {copy.empty} <a href={href('/')}>{copy.keepShopping}</a>
         </p>
       </>
     );

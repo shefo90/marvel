@@ -5,6 +5,9 @@ import ProductImage from '../../components/common/ProductImage/ProductImage.jsx'
 import { useCart } from '../../hooks/useCart.jsx';
 import { useData } from '../../hooks/useData.js';
 import { useLocale } from '../../hooks/useLocale.jsx';
+import { useTrackOnce } from '../../hooks/useTrackEvent.js';
+import { pushEvent } from '../../services/dataLayer.js';
+import { addToCart, viewItem } from '../../utils/events.js';
 import styles from './product.module.scss';
 
 const COPY = {
@@ -47,9 +50,21 @@ export default function ProductPage() {
 
   const image = product.images?.find((i) => i.is_primary) ?? product.images?.[0];
 
+  // Once per product, not once per render: picking a size re-renders this
+  // component, and a view_item on each would inflate every view count.
+  useTrackOnce(product.slug, () => viewItem(product, selected ?? sellable[0], { locale }));
+
   const onAdd = async () => {
     if (!selected) return;
     setDone(false);
+    pushEvent(
+      addToCart(product, selected, {
+        quantity: 1,
+        listId: 'pdp',
+        listName: 'Product detail',
+        locale,
+      }),
+    );
     await add({
       sku: selected.sku,
       quantity: 1,
