@@ -1,18 +1,29 @@
 @use '../../../assets/styles/variables' as v;
 
-.shell {
-  min-height: 100vh;
-}
+// Palette handed over from the storefront. See src/assets/theme.js for why the
+// two apps agree on values rather than on code.
+$ink: #16130f;
+$ink-soft: #6b625a;
+$line: #e7e1da;
+$night: #1f1b17;
+$cream: #f6f1ea;
+
+.shell { min-height: 100vh; }
 
 .brand {
-  color: #fff;
-  font-size: 18px;
-  font-weight: 600;
-  padding: v.$space-md;
+  color: $cream;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 20px v.$space-lg;
+  border-bottom: 1px solid rgba(246, 241, 234, 0.1);
+  margin-bottom: v.$space-sm;
 }
 
 .header {
   background: #fff;
+  border-bottom: 1px solid $line;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -21,22 +32,31 @@
 }
 
 .actor {
-  color: rgba(0, 0, 0, 0.65);
+  color: $ink-soft;
+  font-size: 13px;
 }
 
 .signOut {
   background: none;
-  border: none;
+  border: 1px solid $line;
+  border-radius: 999px;
   cursor: pointer;
-  color: rgba(0, 0, 0, 0.65);
-  padding: 0;
+  color: $ink;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 5px 14px;
+  transition: border-color 200ms ease, background 200ms ease;
 
   &:hover {
-    color: #1677ff;
+    border-color: $ink;
+    background: #faf8f5;
   }
 }
 
 .content {
   margin: 0 auto;
   width: 100%;
+  padding: v.$space-lg;
+  max-width: 1240px;
 }
