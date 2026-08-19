@@ -36,6 +36,7 @@ from repositories.admin_slugs import (
     release_live_path,
 )
 from services import cache
+from services.cache_invalidation import on_commit
 from services.role_access_level import LEVEL_ADMIN, set_access_level
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
@@ -331,14 +332,21 @@ def upsert_translation(db: Session, actor, product_id: int, locale: str, payload
 def _invalidate(
     db: Session, product_id: int, stale: list[tuple[str, str]] | None = None
 ) -> None:
-    """Drop every cached copy of this product, in every locale it has.
+    """Drop every cached copy of this product, in every locale it has — once
+    the caller's transaction has committed.
 
     invalidate_product's docstring is explicit that a missing locale leaves that
     locale serving stale content, so the map is read from the rows rather than
     assumed. ``stale`` carries (locale, slug) pairs that are no longer on any
     row — a slug a caller just renamed away from — so the entry cached under
     the retired slug (``repositories.product.get_product_by_slug`` keys on it)
-    is dropped immediately instead of waiting out its TTL.
+    is dropped instead of waiting out its TTL.
+
+    The slug map is read here, inside the transaction, where the flushed rows
+    are already visible; only the Redis writes wait for the commit. Dropping
+    the keys before the commit is what ``services.cache_invalidation`` exists to
+    prevent: it left a whole transaction's worth of window in which a storefront
+    read could re-cache the pre-commit price for the next sixty seconds.
     """
     slugs = {
         loc: slug
@@ -348,9 +356,15 @@ def _invalidate(
             )
         ).all()
     }
-    cache.invalidate_product(product_id, slugs)
-    if stale:
-        cache.delete(*(cache.key(cache.NS_PRODUCT, loc, slug) for loc, slug in stale))
+
+    def drop() -> None:
+        cache.invalidate_product(product_id, slugs)
+        if stale:
+            cache.delete(
+                *(cache.key(cache.NS_PRODUCT, loc, slug) for loc, slug in stale)
+            )
+
+    on_commit(db, drop)
 
 
 def _clean_sku_segment(raw: str) -> str:

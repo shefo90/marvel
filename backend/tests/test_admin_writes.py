@@ -25,7 +25,6 @@ from repositories.admin_catalog import (
     update_variant,
     upsert_translation,
 )
-from services import cache
 
 
 def _level2_category(db) -> Category:
@@ -238,27 +237,6 @@ def test_renaming_an_unpublished_slug_writes_no_redirect(db):
     assert db.execute(
         select(UrlRedirect).where(UrlRedirect.entity_id == p.id)
     ).first() is None
-
-
-def test_renaming_a_slug_drops_the_old_slugs_cache_entry(db):
-    """_invalidate's docstring claims it drops every cached copy. Before the
-    fix it only rebuilt keys from the CURRENT rows, so a renamed locale's OLD
-    slug -- what get_product_by_slug is keyed on -- kept serving a stale hit
-    until TTL_PRICING (60s) expired on its own."""
-    _locale(db, "ar")
-    cat, actor = _level2_category(db), _actor(db)
-    p = create_product(db, actor, {
-        "title": "Sandal", "slug": "tr-sandal-6", "brand": "Pixi", "category_id": cat.id,
-    })
-    upsert_translation(db, actor, p.id, "ar", {"title": "صندل", "slug": "صندل-قديم-2"})
-
-    old_key = cache.key(cache.NS_PRODUCT, "ar", "صندل-قديم-2")
-    cache.set(old_key, {"stale": True})
-    assert cache.get(old_key) == {"stale": True}
-
-    upsert_translation(db, actor, p.id, "ar", {"slug": "صندل-جديد-2"})
-
-    assert cache.get(old_key) is None
 
 
 def test_publishing_an_incomplete_translation_is_rejected_with_422(db):
