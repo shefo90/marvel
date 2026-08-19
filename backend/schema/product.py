@@ -47,6 +47,40 @@ class variant_response(BaseModel):
     gtin: str | None = None
 
 
+class attribute_option(BaseModel):
+    """A colour or size, by canonical code and localized label.
+
+    ``code`` is what a variant stores and what a filter sends back; ``label`` is
+    display text and differs per locale. Filtering on the label would break the
+    moment the Arabic page sent "أسود" where the column holds "black".
+    """
+
+    code: str
+    label: str
+
+
+class facet_option(attribute_option):
+    count: int
+    selected: bool = False
+
+
+class price_bounds(BaseModel):
+    min: Decimal | None = None
+    max: Decimal | None = None
+
+
+class listing_facets(BaseModel):
+    """What the shopper can still narrow by, and how much each would leave.
+
+    Counts exclude their own facet, so ticking one size does not zero every
+    other size -- those are precisely the boxes that would widen the result.
+    """
+
+    sizes: list[facet_option] = []
+    colors: list[facet_option] = []
+    price: price_bounds = price_bounds()
+
+
 class product_summary(BaseModel):
     """Card shape for listings. Carries the list identity so the frontend can
     emit section 5's ``view_item_list`` / ``select_item`` without a second call."""
@@ -65,6 +99,13 @@ class product_summary(BaseModel):
     sale_price: Decimal | None = None
     currency: str = "EGP"
     primary_image: image_response | None = None
+    # The second photograph, for the card's hover swap. None when the product
+    # has only one, so the frontend need not guess whether a swap exists.
+    hover_image: image_response | None = None
+    colors: list[attribute_option] = []
+    # In-stock sizes only: a size shown on a card is an implicit promise it can
+    # be bought.
+    sizes: list[attribute_option] = []
     item_list_id: str | None = None
     item_list_name: str | None = None
     index: int | None = None
@@ -111,3 +152,5 @@ class product_list_response(BaseModel):
     page_size: int
     item_list_id: str | None = None
     item_list_name: str | None = None
+    sort: str = "featured"
+    facets: listing_facets = listing_facets()
