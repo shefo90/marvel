@@ -1,9 +1,70 @@
 @use '../../../assets/styles/variables' as v;
+@use '../../../assets/styles/mixins' as m;
 
 .footer {
-  margin-top: v.$space-xl;
-  padding: v.$space-lg;
   border-top: 1px solid v.$line;
+  background: v.$surface;
+  margin-top: v.$space-xl;
+  padding-block: v.$space-xl v.$space-lg;
+}
+
+.grid {
+  @include m.page-width;
+  display: grid;
+  grid-template-columns: 1.4fr repeat(auto-fit, minmax(140px, 1fr));
+  gap: v.$space-xl;
+  align-items: start;
+}
+
+.brandColumn { max-width: 34ch; }
+
+.brand {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 v.$space-sm;
+}
+
+.blurb {
   color: v.$ink-soft;
-  font-size: 14px;
+  font-size: 13px;
+  margin: 0;
+}
+
+.heading {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: v.$ink-soft;
+  margin: 0 0 v.$space-sm;
+  font-weight: 600;
+}
+
+.links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+
+  a {
+    color: v.$ink;
+    text-decoration: none;
+    font-size: 13px;
+
+    &:hover { text-decoration: underline; }
+  }
+}
+
+.rights {
+  @include m.page-width;
+  border-top: 1px solid v.$line;
+  margin-top: v.$space-xl;
+  padding-top: v.$space-lg;
+  color: v.$ink-soft;
+  font-size: 12px;
+}
+
+@media (max-width: 720px) {
+  .grid { grid-template-columns: 1fr 1fr; gap: v.$space-lg; }
+  .brandColumn { grid-column: 1 / -1; }
 }

@@ -34,6 +34,7 @@ from models.category_translations import CategoryTranslation  # noqa: E402
 from models.collection_translations import CollectionTranslation  # noqa: E402
 from models.collections import Collection  # noqa: E402
 from models.locales import Locale  # noqa: E402
+from repositories.admin_slugs import normalize_translation_slug  # noqa: E402
 from repositories.taxonomy import invalidate_taxonomy  # noqa: E402
 
 db = SessionLocal()
@@ -102,6 +103,46 @@ COLORS = [
 ]
 
 
+def localized_slug(base: str, title: str, locale: str) -> str:
+    """The Arabic URL is Arabic.
+
+    Section 8A requires stable per-language URLs, and the product pages already
+    do this properly -- /ar/products/صندل-جلد, not /ar/products/leather-sandal-ar.
+    A transliterated slug with a language suffix is neither language: it reads
+    as nothing to an Arabic shopper and gives a crawler no signal at all.
+
+    Slugs are stored decoded and percent-encoded exactly once at render, and the
+    slug CHECK constraint is written as a denylist of ASCII punctuation for this
+    reason -- an allowlist under the C collation would reject every Arabic letter.
+    """
+    if locale == "en":
+        return base
+    return normalize_translation_slug(title)
+
+
+def repair_transliterated_slugs() -> int:
+    """Correct Arabic slugs an earlier run of this script wrote as "<slug>-ar".
+
+    get_or_create never updates an existing row, which is what makes re-running
+    safe -- but it also means a slug this script got wrong the first time would
+    stay wrong forever. Only rows still carrying that exact shape are touched,
+    so an operator's own Arabic slug is never overwritten.
+    """
+    fixed = 0
+    for model, owner in ((CategoryTranslation, "category"), (CollectionTranslation, "collection")):
+        rows = db.execute(
+            select(model).where(model.locale == "ar", model.slug.like("%-ar"))
+        ).scalars().all()
+        for row in rows:
+            corrected = normalize_translation_slug(row.title)
+            if corrected and corrected != row.slug:
+                row.slug = corrected
+                fixed += 1
+    if fixed:
+        db.flush()
+    return fixed
+
+
 def ensure_locales() -> None:
     for code, name, direction in (("en", "English", "ltr"), ("ar", "العربية", "rtl")):
         get_or_create(
@@ -131,7 +172,7 @@ def ensure_category(slug, name, arabic, *, parent=None, position=0) -> Category:
             CategoryTranslation, category_id=category.id, locale=locale,
             defaults={
                 "title": title,
-                "slug": slug if locale == "en" else f"{slug}-ar",
+                "slug": localized_slug(slug, title, locale),
                 "description": title,
                 "meta_description": title,
                 "is_published": True,
@@ -156,7 +197,7 @@ def ensure_collection(slug, name, arabic, position) -> Collection:
             CollectionTranslation, collection_id=collection.id, locale=locale,
             defaults={
                 "title": title,
-                "slug": slug if locale == "en" else f"{slug}-ar",
+                "slug": localized_slug(slug, title, locale),
                 "description": title,
                 "meta_description": title,
                 "is_published": True,
@@ -206,11 +247,15 @@ def main() -> None:
         _, created = ensure_attribute(AttributeType.color, code, label, arabic, order)
         attributes += created
 
+    repaired = repair_transliterated_slugs()
+
     db.commit()
     # The menu caches for six hours; without this the shop would not show any of
     # the above until it expired.
     invalidate_taxonomy()
 
+    if repaired:
+        print(f"arabic slugs repaired: {repaired}")
     print(f"categories created: {categories}")
     print(f"collections created: {collections}")
     print(f"attribute values created: {attributes}")

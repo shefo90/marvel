@@ -1,6 +1,10 @@
 import { render } from 'vike/abort';
 
-import { listProducts } from '../../services/catalog.service.js';
+import {
+  listCategories,
+  listCollections,
+  listProducts,
+} from '../../services/catalog.service.js';
 import { publicOrigin } from '../../services/api.js';
 import { isLocale } from '../../utils/locales.js';
 
@@ -9,12 +13,26 @@ const COPY = {
     title: 'Marvel — women’s footwear and handbags',
     description:
       'Shoes and bags, delivered across Egypt. Cash on delivery available.',
-    heading: 'New in',
+    heroTitle: 'Every step, considered.',
+    heroBody:
+      'Shoes and bags made for Egyptian summers and everything after them. Delivered nationwide, cash on delivery.',
+    heroCta: 'Shop new in',
+    newIn: 'New in',
+    shopCategory: 'Shop by category',
+    edits: 'Edits',
+    viewAll: 'View all',
   },
   ar: {
     title: 'مارفل — أحذية وحقائب نسائية',
     description: 'أحذية وحقائب، توصيل داخل مصر. الدفع عند الاستلام متاح.',
-    heading: 'وصل حديثًا',
+    heroTitle: 'كل خطوة لها حساب.',
+    heroBody:
+      'أحذية وحقائب لصيف مصر وما بعده. توصيل لكل المحافظات، والدفع عند الاستلام.',
+    heroCta: 'تسوّقي الجديد',
+    newIn: 'وصل حديثًا',
+    shopCategory: 'تسوّقي حسب القسم',
+    edits: 'تشكيلات',
+    viewAll: 'عرض الكل',
   },
 };
 
@@ -28,18 +46,23 @@ export async function data(pageContext) {
   const copy = COPY[locale];
   const origin = publicOrigin();
 
-  let listing = { items: [], total: 0 };
-  try {
-    listing = await listProducts(locale, { page: 1, pageSize: 24 });
-  } catch {
-    // A catalogue that will not load is an empty shop, not a broken one. The
-    // page still renders its chrome and its head, so a crawler sees a valid
-    // document rather than a 500.
-  }
+  // One await, not four in sequence. These are independent reads and the page
+  // cannot render until the slowest returns either way, so serialising them
+  // would just add the other three latencies to it.
+  const [listing, categories, collections] = await Promise.all([
+    listProducts(locale, { page: 1, pageSize: 8, sort: 'newest' }).catch(() => ({
+      items: [],
+      total: 0,
+    })),
+    listCategories(locale).catch(() => []),
+    listCollections(locale).catch(() => []),
+  ]);
 
   return {
     locale,
     listing,
+    categories,
+    collections,
     copy,
     head: {
       title: copy.title,

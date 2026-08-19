@@ -1,7 +1,123 @@
 @use '../../assets/styles/variables' as v;
 
+.hero {
+  background: linear-gradient(135deg, #1f1b17 0%, #3a2f28 100%);
+  color: #f6f1ea;
+  border-radius: v.$radius;
+  padding: clamp(#{v.$space-lg}, 6vw, 96px);
+  margin-bottom: v.$space-xl;
+}
+
+.heroText {
+  max-width: 46ch;
+
+  h1 {
+    color: inherit;
+    font-size: clamp(28px, 5vw, 48px);
+    line-height: 1.15;
+    margin: 0 0 v.$space-md;
+  }
+
+  p {
+    color: rgba(246, 241, 234, 0.82);
+    margin: 0 0 v.$space-lg;
+    font-size: 16px;
+  }
+}
+
+.heroCta {
+  display: inline-block;
+  background: #f6f1ea;
+  color: v.$ink;
+  text-decoration: none;
+  font-weight: 600;
+  padding: 12px v.$space-lg;
+  border-radius: 999px;
+
+  &:hover { background: #fff; }
+}
+
+.section { margin-bottom: v.$space-xl; }
+
+.sectionHeading {
+  margin: 0;
+  font-size: clamp(18px, 2vw, 22px);
+  letter-spacing: 0.02em;
+}
+
+.groupHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: v.$space-md;
+  margin-bottom: v.$space-md;
+
+  h3 { margin: 0; font-size: 16px; }
+  a { font-size: 13px; }
+}
+
+.group { margin-top: v.$space-lg; }
+
+.tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: v.$space-sm;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+
+  a {
+    display: inline-block;
+    padding: 10px v.$space-lg;
+    border: 1px solid v.$line;
+    border-radius: 999px;
+    background: v.$surface;
+    color: v.$ink;
+    text-decoration: none;
+    font-size: 14px;
+
+    &:hover { border-color: v.$ink; }
+  }
+}
+
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   gap: v.$space-lg;
+}
+
+.empty { margin: 0; }
+
+.edits {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: v.$space-md;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+
+  a {
+    display: block;
+    height: 100%;
+    padding: v.$space-lg;
+    border: 1px solid v.$line;
+    border-radius: v.$radius;
+    background: v.$surface;
+    text-decoration: none;
+    color: v.$ink;
+
+    &:hover { border-color: v.$ink; }
+  }
+}
+
+.editTitle {
+  display: block;
+  font-weight: 600;
+  margin-bottom: v.$space-xs;
+}
+
+.editBlurb {
+  display: block;
+  font-size: 13px;
+  color: v.$ink-soft;
 }

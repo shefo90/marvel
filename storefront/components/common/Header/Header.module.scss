@@ -1,41 +1,118 @@
 @use '../../../assets/styles/variables' as v;
+@use '../../../assets/styles/mixins' as m;
 
 .header {
+  background: v.$surface;
+  border-bottom: 1px solid v.$line;
+  position: relative;
+  z-index: 20;
+}
+
+.bar {
+  @include m.page-width;
   display: flex;
   align-items: center;
   gap: v.$space-lg;
-  padding: v.$space-md v.$space-lg;
-  border-bottom: 1px solid v.$line;
-  background: v.$surface;
+  min-height: 64px;
 }
 
 .brand {
   font-size: 20px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  text-decoration: none;
   color: v.$ink;
+  text-decoration: none;
+  flex-shrink: 0;
 }
 
-.nav {
+.nav { flex: 1; min-width: 0; }
+
+.topLevel {
   display: flex;
-  gap: v.$space-md;
+  gap: v.$space-lg;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.topItem { position: relative; }
+
+.topLink {
+  display: inline-block;
+  padding: 20px 0;
+  color: v.$ink;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+
+  &:hover { color: v.$accent-ink; }
+}
+
+// Hidden by visibility rather than display:none, and present in the markup
+// either way. A crawler reads the links regardless, and CSS alone decides what
+// a pointer sees — no JavaScript is involved in opening this.
+.panel {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 100%;
+  min-width: 220px;
+  background: v.$surface;
+  border: 1px solid v.$line;
+  border-radius: v.$radius;
+  box-shadow: 0 12px 28px rgba(22, 19, 15, 0.1);
+  padding: v.$space-sm;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.topItem:hover .panel,
+.topItem:focus-within .panel {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel { transition: none; }
+}
+
+.children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 
   a {
-    color: v.$ink-soft;
+    display: block;
+    padding: v.$space-sm v.$space-md;
+    border-radius: 6px;
+    color: v.$ink;
     text-decoration: none;
+    font-size: 14px;
+    white-space: nowrap;
 
-    &:hover { color: v.$ink; }
+    &:hover { background: v.$ground; color: v.$accent-ink; }
   }
 }
 
+.viewAll {
+  font-weight: 600;
+  color: v.$accent-ink !important;
+  border-top: 1px solid v.$line;
+  margin-top: v.$space-xs;
+  padding-top: v.$space-sm !important;
+  border-radius: 0 !important;
+}
+
 .tail {
-  // margin-inline-start, not margin-left: the header flips wholesale in Arabic
-  // and a physical property would pin this to the wrong edge.
-  margin-inline-start: auto;
   display: flex;
   align-items: center;
   gap: v.$space-lg;
+  flex-shrink: 0;
+  margin-inline-start: auto;
 }
 
 .languages {
@@ -44,34 +121,40 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  font-size: 14px;
-
-  a { color: v.$ink-soft; text-decoration: none; }
-  a:hover { color: v.$ink; }
+  font-size: 13px;
 }
 
-.currentLanguage {
-  color: v.$ink;
-  font-weight: 600;
-}
+.currentLanguage { font-weight: 700; }
 
 .cart {
-  display: inline-flex;
-  align-items: center;
-  gap: v.$space-xs;
   color: v.$ink;
   text-decoration: none;
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .count {
-  display: inline-grid;
-  place-items: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: 999px;
   background: v.$accent;
   color: #fff;
+  border-radius: 999px;
+  min-width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 12px;
+  padding: 0 6px;
+}
+
+@media (max-width: 760px) {
+  .bar { flex-wrap: wrap; min-height: 0; padding-block: v.$space-sm; }
+  .nav { order: 3; width: 100%; overflow-x: auto; }
+  .topLevel { gap: v.$space-md; }
+  .topLink { padding: v.$space-sm 0; }
+  // A hover panel is meaningless on a touch screen: the parent link goes to the
+  // category page, which lists the children as tiles.
+  .panel { display: none; }
 }
