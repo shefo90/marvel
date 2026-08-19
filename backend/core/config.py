@@ -31,6 +31,20 @@ GUEST_CART_TTL_DAYS = int(os.getenv("GUEST_CART_TTL_DAYS", "30"))
 CUSTOMER_CART_TTL_DAYS = int(os.getenv("CUSTOMER_CART_TTL_DAYS", "90"))
 CART_ABANDONED_AFTER_HOURS = int(os.getenv("CART_ABANDONED_AFTER_HOURS", "24"))
 
+# Background worker. The queue is a Postgres table, not Redis: a job row is
+# written in the same transaction as the change that caused it, so the two can
+# never disagree -- see repositories/jobs.py.
+#
+# JOB_LEASE_SECONDS is how long a claimed job may stay claimed before another
+# worker assumes the first one died. It must exceed the slowest handler's
+# runtime, or two workers will run the same job concurrently.
+JOB_POLL_SECONDS = float(os.getenv("JOB_POLL_SECONDS", "2"))
+JOB_BATCH_SIZE = int(os.getenv("JOB_BATCH_SIZE", "5"))
+JOB_LEASE_SECONDS = int(os.getenv("JOB_LEASE_SECONDS", "300"))
+JOB_MAX_ATTEMPTS = int(os.getenv("JOB_MAX_ATTEMPTS", "5"))
+JOB_RETRY_BASE_SECONDS = float(os.getenv("JOB_RETRY_BASE_SECONDS", "10"))
+JOB_RETRY_CAP_SECONDS = float(os.getenv("JOB_RETRY_CAP_SECONDS", "900"))
+
 # Uploaded imagery. The one piece of state that is not in Postgres, which means
 # a Postgres backup does not cover it -- the volume behind MEDIA_ROOT must be in
 # the backup procedure. MEDIA_URL_PREFIX is what the browser sees, so moving the

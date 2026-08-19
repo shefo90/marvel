@@ -5,6 +5,9 @@ Alembic's ``env.py`` imports this module, so a table missing from this list is a
 table missing from every migration.
 """
 
+# --- Background work (no FKs: a job outlives the row that queued it) ------
+from .jobs import Job
+
 # --- Localization spine (imported first: translations FK to locales) -------
 from .locales import Locale
 
@@ -122,4 +125,5 @@ __all__ = [
     "ShipmentStatusEvent",
     "OrderReturn",
     "OrderReturnItem",
+    "Job",
 ]

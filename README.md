@@ -23,10 +23,10 @@ behind them.
 | **Order management** | Done. `operations` role: the queue, one order's detail, recorded status moves |
 | **S2 — storefront & SEO** | Done. `storefront/`, server-rendered on Vike, bilingual with RTL, sitemaps and JSON-LD. **A shopper can buy** |
 | **S3 — browser measurement** | Done. dataLayer, GA4 ecommerce events, Consent Mode v2. Needs a GTM container id |
-| **S4 — commerce integrations** | COD works end to end. **Not done:** payment gateway, courier adapter, background queue, retries |
+| **S4 — commerce integrations** | COD works end to end. Background queue done — a Postgres outbox with retries, a dead-letter path and the cart sweeps. **Not done:** payment gateway, courier adapter |
 | **S5–S7** | Not started |
 
-305 backend tests, 70 admin tests, 50 storefront tests. Five migrations.
+345 backend tests, 70 admin tests, 50 storefront tests. Six migrations.
 
 **A shopper can browse in either language, add to a cart, check out with cash on delivery, and an
 operator can see the order and move it along.** What is missing is card payment, a courier
@@ -68,6 +68,35 @@ copy .env.example .env                 # then fill in DB_URL and SECRET_KEY
 .venv\Scripts\python scripts\seed.py
 .venv\Scripts\python -m uvicorn main:app --reload
 ```
+
+## The background worker
+
+```bash
+cd backend
+.venv\Scripts\python -m workers.runner        # or: docker compose up -d worker
+```
+
+Nothing in the shop *fails* without it — the API never waits on it — but two things quietly stop
+happening: idle carts are never marked abandoned, and carts past their TTL are never expired. Once a
+payment gateway and a courier exist, this is also what will retry their calls, so it becomes
+load-bearing then.
+
+The queue is the `jobs` table, not Redis, even though Redis is in the stack. A job row is written in
+the *same transaction* as the change that caused it, so an order and its "capture the payment" job
+commit together or not at all; enqueueing to Redis is a second write to a second system, and every
+instruction between the two is a window where a crash loses the job with nothing left to show it
+existed. `backend/models/jobs.py` has the rest of the reasoning.
+
+A job that succeeds deletes its row, so the table only ever holds work that is outstanding, in
+flight, or dead. **The dead-letter queue is therefore a plain query** — this is what to look at when
+something is not happening:
+
+```sql
+SELECT kind, attempts, last_error, created_at FROM jobs WHERE status = 'dead' ORDER BY created_at DESC;
+```
+
+Running two workers is safe: claims use `FOR UPDATE SKIP LOCKED`, and a partial unique index on
+`dedupe_key` means the recurring sweeps are scheduled exactly once no matter how many workers try.
 
 ## Tests
 

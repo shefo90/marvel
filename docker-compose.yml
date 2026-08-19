@@ -81,6 +81,39 @@ services:
       sh -c "alembic upgrade head &&
              uvicorn main:app --host 0.0.0.0 --port 8000"
 
+  worker:
+    # Same image as the API, different entry point. The queue is a Postgres
+    # table, so this needs the database and nothing else -- no broker, and no
+    # Redis: see backend/models/jobs.py for why the queue is not in Redis even
+    # though Redis is right there.
+    build: ./backend
+    container_name: marvel-worker
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        # Not for the API itself, but for its migrations: the worker must not
+        # start querying `jobs` before the table exists. It deliberately does
+        # NOT run `alembic upgrade` of its own -- two processes racing to
+        # migrate the same database is how you get a half-applied schema.
+        condition: service_started
+    environment:
+      DB_URL: postgresql+psycopg2://marvel:marvel@db:5432/marvel
+      DEFAULT_CURRENCY: EGP
+      DEFAULT_LOCALE: en
+      CART_ABANDONED_AFTER_HOURS: "24"
+      GUEST_CART_TTL_DAYS: "30"
+      CUSTOMER_CART_TTL_DAYS: "90"
+      # How long a claimed job may stay claimed before another worker assumes
+      # this one died. Must exceed the slowest handler's runtime, or two
+      # workers will run the same job at once.
+      JOB_LEASE_SECONDS: "300"
+      JOB_POLL_SECONDS: "2"
+      JOB_BATCH_SIZE: "5"
+      JOB_MAX_ATTEMPTS: "5"
+    command: python -m workers.runner
+    restart: unless-stopped
+
 volumes:
   marvel_pgdata:
   marvel_media:

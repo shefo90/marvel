@@ -193,13 +193,33 @@ def _cart_by_token(db: Session, token: str, *, for_update: bool) -> Cart | None:
 def _cart_by_customer(db: Session, customer_id: int, *, for_update: bool) -> Cart | None:
     stmt = (
         select(Cart)
-        .where(Cart.customer_id == customer_id, Cart.status == CartStatus.active.value)
+        .where(
+            Cart.customer_id == customer_id,
+            # Abandoned too: the sweep flags a cart idle for a day, and a
+            # signed-in shopper coming back must find the basket they left, not
+            # an empty one. Ordering means a genuinely active cart still wins.
+            Cart.status.in_([CartStatus.active.value, CartStatus.abandoned.value]),
+        )
         .order_by(Cart.last_activity_at.desc())
         .limit(1)
     )
     if for_update:
         stmt = stmt.with_for_update()
     return db.execute(stmt).scalar_one_or_none()
+
+
+def _reactivate_if_abandoned(cart: Cart | None) -> None:
+    """Undo the abandonment sweep for a shopper who came back.
+
+    ``abandoned`` is an analytics marker, not a demolition. ``tasks.carts``
+    flags any cart idle past CART_ABANDONED_AFTER_HOURS so abandonment can be
+    counted and, later, recovered by email -- but the basket itself has to
+    survive, or every shopper who takes a day to decide loses it. ``expires_at``,
+    refreshed on every touch, is what actually ends a cart's life.
+    """
+    if cart is not None and _enum_value(cart.status) == CartStatus.abandoned.value:
+        cart.status = CartStatus.active.value
+        cart.abandoned_at = None
 
 
 def _create_cart(db: Session, *, locale: str, customer_id: int | None) -> Cart:
@@ -242,9 +262,10 @@ def _resolve(
     cart = None
     if cart_token:
         cart = _cart_by_token(db, cart_token, for_update=True)
+        _reactivate_if_abandoned(cart)
         if cart is not None and _enum_value(cart.status) != CartStatus.active.value:
-            # Converted / expired / abandoned carts are not reusable. A new one
-            # is issued rather than silently resurrecting an ordered basket.
+            # Converted and expired carts are not reusable. A new one is issued
+            # rather than silently resurrecting an ordered basket.
             cart = None
         if (
             cart is not None
@@ -257,6 +278,7 @@ def _resolve(
 
     if customer_id is not None:
         owned = _cart_by_customer(db, customer_id, for_update=True)
+        _reactivate_if_abandoned(owned)
         if cart is None:
             cart = owned
         elif owned is not None and owned.id != cart.id:

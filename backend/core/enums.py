@@ -88,6 +88,20 @@ class CartStatus(str, Enum):
     expired = "expired"
 
 
+class JobStatus(str, Enum):
+    """There is deliberately no ``done``.
+
+    A job that succeeds is deleted, so the table only ever holds work that is
+    outstanding, in flight, or dead. That keeps it small without a retention
+    policy, and makes the dead-letter queue a plain SELECT rather than a view
+    over history nobody prunes.
+    """
+
+    pending = "pending"
+    running = "running"
+    dead = "dead"
+
+
 class TranslationStatus(str, Enum):
     """Section 6.2 of the design: only ``published`` rows are hreflang cluster
     members. Draft and machine-stub rows are never members, and never enter a
