@@ -137,6 +137,7 @@ class admin_blocker(BaseModel):
 
 class admin_variant_row(BaseModel):
     id: int
+    updated_at: datetime | None = None
     sku: str
     variant_title: str
     size: str | None
@@ -157,6 +158,10 @@ class admin_product_update(BaseModel):
     condition: ProductCondition | None = None
     gender: Gender | None = None
     age_group: AgeGroup | None = None
+    # The row version this edit was built from. Optional: omitting it keeps
+    # the previous last-write-wins behaviour, which is what every caller
+    # written before this field did. See services/optimistic_lock.py.
+    expected_updated_at: datetime | None = None
 
 
 class admin_variant_update(BaseModel):
@@ -180,6 +185,10 @@ class admin_variant_update(BaseModel):
     height_cm: Decimal | None = None
     merchant_eligible: bool | None = None
     is_active: bool | None = None
+    # The row version this edit was built from. Optional: omitting it keeps
+    # the previous last-write-wins behaviour, which is what every caller
+    # written before this field did. See services/optimistic_lock.py.
+    expected_updated_at: datetime | None = None
 
 
 class admin_promotion_target(BaseModel):
@@ -273,6 +282,7 @@ class admin_image_translation_detail(BaseModel):
 
 class admin_product_full(BaseModel):
     id: int
+    updated_at: datetime | None = None
     item_group_id: str
     slug: str
     title: str

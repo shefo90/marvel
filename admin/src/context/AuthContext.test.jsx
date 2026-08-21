@@ -39,7 +39,13 @@ function Harness() {
       <button type="button" onClick={signOut}>
         sign out
       </button>
-      <button type="button" onClick={() => api.get('/admin/products')}>
+      {/*
+        Swallowed here, not at the call site in the test. One of these tests
+        answers a 403 on purpose, and an unhandled rejection escaping the click
+        handler makes Vitest report an error for a run whose assertions all
+        passed -- which it warns may be hiding false positives elsewhere.
+      */}
+      <button type="button" onClick={() => { api.get('/admin/products').catch(() => {}); }}>
         fetch
       </button>
     </div>

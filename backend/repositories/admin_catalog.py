@@ -37,6 +37,7 @@ from repositories.admin_slugs import (
 )
 from services import cache
 from services.cache_invalidation import on_commit
+from services.optimistic_lock import guard_unmodified
 from services.role_access_level import LEVEL_ADMIN, set_access_level
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
@@ -582,6 +583,10 @@ def get_product_for_admin(db, product_id: int) -> dict:
             "sale_price": v.sale_price,
             "stock_quantity": v.stock_quantity,
             "is_active": v.is_active,
+            # Per row: the variant grid edits in place, and the product's
+            # own version would refuse an edit to one variant because a
+            # different one had moved.
+            "updated_at": v.updated_at,
         }
         for v in db.execute(
             select(ProductVariant)
@@ -610,6 +615,7 @@ def get_product_for_admin(db, product_id: int) -> dict:
 
     return {
         "id": product.id,
+        "updated_at": product.updated_at,
         "item_group_id": product.item_group_id,
         "slug": product.slug,
         "title": product.title,
@@ -641,6 +647,8 @@ def update_product(db, actor, product_id: int, payload: dict):
     product = db.get(Product, product_id)
     if product is None:
         raise HTTPException(status_code=404, detail="product not found")
+
+    guard_unmodified(product, payload, what="product")
 
     if "slug" in payload and payload["slug"] != product.slug:
         slug = (payload["slug"] or "").strip().lower()
@@ -728,6 +736,8 @@ def update_variant(db, actor, variant_id: int, payload: dict):
     variant = db.get(ProductVariant, variant_id)
     if variant is None:
         raise HTTPException(status_code=404, detail="variant not found")
+
+    guard_unmodified(variant, payload, what="variant")
 
     if "sku" in payload and payload["sku"] is not None and payload["sku"] != variant.sku:
         # trg_variants_sku_immutable would raise a restrict_violation. Refusing

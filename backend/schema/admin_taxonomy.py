@@ -8,6 +8,8 @@ generated column backing a composite foreign key: accepting a level from the
 caller only creates a way for it to disagree with the parent.
 """
 
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -44,6 +46,10 @@ class admin_category_create(BaseModel):
 
 
 class admin_category_update(BaseModel):
+    # The row version this edit was built from. Optional: omitting it keeps
+    # the previous last-write-wins behaviour, which is what every caller
+    # written before this field did. See services/optimistic_lock.py.
+    expected_updated_at: datetime | None = None
     name: str | None = None
     slug: str | None = None
     list_id: str | None = None
@@ -66,6 +72,7 @@ class admin_category_node(BaseModel):
     is_active: bool
     # Shown so the operator can see what deactivating this would hide.
     product_count: int = 0
+    updated_at: datetime | None = None
     translations: list[admin_taxonomy_translation] = []
     children: list["admin_category_node"] = []
 
@@ -80,6 +87,10 @@ class admin_collection_create(BaseModel):
 
 
 class admin_collection_update(BaseModel):
+    # The row version this edit was built from. Optional: omitting it keeps
+    # the previous last-write-wins behaviour, which is what every caller
+    # written before this field did. See services/optimistic_lock.py.
+    expected_updated_at: datetime | None = None
     name: str | None = None
     slug: str | None = None
     list_id: str | None = None
@@ -99,6 +110,7 @@ class admin_collection_row(BaseModel):
     position: int
     is_active: bool
     product_count: int = 0
+    updated_at: datetime | None = None
     translations: list[admin_taxonomy_translation] = []
 
 

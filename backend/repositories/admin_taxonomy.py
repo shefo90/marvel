@@ -35,6 +35,7 @@ from models.products import Product
 from repositories.admin_slugs import normalize_translation_slug
 from repositories.taxonomy import invalidate_taxonomy
 from services.cache_invalidation import on_commit
+from services.optimistic_lock import guard_unmodified
 
 
 def _invalidate(db: Session) -> None:
@@ -110,6 +111,10 @@ def list_category_tree_for_admin(db: Session) -> list[dict]:
             "position": category.position,
             "is_active": category.is_active,
             "product_count": counts.get(category.id, 0),
+            # The version the edit form is built from; sent back as
+            # expected_updated_at so a stale save is refused rather than
+            # silently overwriting another operator.
+            "updated_at": category.updated_at,
             "translations": [
                 {
                     "locale": tr.locale,
@@ -190,6 +195,8 @@ def update_category(db: Session, actor, category_id: int, payload: dict) -> Cate
     category = db.get(Category, category_id)
     if category is None:
         raise HTTPException(status_code=404, detail="category not found")
+
+    guard_unmodified(category, payload, what="category")
 
     if "parent_id" in payload and payload["parent_id"] != category.parent_id:
         # Moving a category between levels would change products.category_level,
@@ -280,6 +287,7 @@ def list_collections_for_admin(db: Session) -> list[dict]:
             "position": c.position,
             "is_active": c.is_active,
             "product_count": counts.get(c.id, 0),
+            "updated_at": c.updated_at,
             "translations": [
                 {
                     "locale": tr.locale,
@@ -323,6 +331,8 @@ def update_collection(db: Session, actor, collection_id: int, payload: dict) -> 
     collection = db.get(Collection, collection_id)
     if collection is None:
         raise HTTPException(status_code=404, detail="collection not found")
+
+    guard_unmodified(collection, payload, what="collection")
 
     for field in ("name", "description", "position"):
         if field in payload and payload[field] is not None:
