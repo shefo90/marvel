@@ -296,3 +296,196 @@ def test_an_unknown_locale_sitemap_is_a_404_not_an_empty_one(client):
     r = client.get("/sitemap-fr.xml")
 
     assert r.status_code == 404
+
+
+# --- categories and collections -----------------------------------------
+#
+# These pages existed for a while before they were in any sitemap, which meant
+# the shop's most stable, hand-curated URLs were the only ones Google could not
+# find. Membership follows the same predicate as products, with one deliberate
+# difference: it is STRICTER than the rule the navigation menu uses. A menu
+# entry needs no meta description, but asking Google to crawl a page with none
+# is asking it to index a thin one.
+
+def _uniq(prefix: str) -> str:
+    import uuid
+
+    return f"{prefix}-{uuid.uuid4().hex[:10]}"
+
+
+def _sitemap_category(db, *, active=True, indexable=True) -> Category:
+    category = Category(
+        parent_id=None, level=1, name="Shoes", slug=_uniq("smc"),
+        list_id=_uniq("smc").replace("-", "_"), position=1,
+        is_active=active, is_indexable=indexable,
+    )
+    db.add(category)
+    db.flush()
+    return category
+
+
+def _category_translation(db, category, locale, **overrides):
+    from models.category_translations import CategoryTranslation
+
+    _locale(db, locale)
+    values = {
+        "title": "Shoes", "description": "A description",
+        "meta_description": "A meta description", "is_published": True,
+        "robots_index": True, "translation_source": "human",
+    }
+    values.update(overrides)
+    row = CategoryTranslation(
+        category_id=category.id, locale=locale,
+        slug=values.pop("slug", _uniq("smcat")), **values,
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
+def _sitemap_collection(db, *, active=True):
+    from models.collections import Collection
+
+    collection = Collection(
+        name="Edit", slug=_uniq("smcol"),
+        list_id=_uniq("smcol").replace("-", "_"), position=1,
+        is_active=active, is_indexable=True,
+    )
+    db.add(collection)
+    db.flush()
+    return collection
+
+
+def _collection_translation(db, collection, locale, **overrides):
+    from models.collection_translations import CollectionTranslation
+
+    _locale(db, locale)
+    values = {
+        "title": "Edit", "description": "A description",
+        "meta_description": "A meta description", "is_published": True,
+        "robots_index": True, "translation_source": "human",
+    }
+    values.update(overrides)
+    row = CollectionTranslation(
+        collection_id=collection.id, locale=locale,
+        slug=values.pop("slug", _uniq("smedit")), **values,
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
+def test_a_published_category_is_listed(db):
+    from repositories.sitemap import category_entries
+
+    category = _sitemap_category(db)
+    tr = _category_translation(db, category, "en")
+
+    assert tr.slug in _slugs(category_entries(db, "en"))
+
+
+def test_a_category_url_uses_the_c_prefix(db):
+    """Categories live under /c/ so an operator-chosen slug can never shadow a
+    product of the same name. The sitemap has to agree with the router."""
+    from repositories.sitemap import category_entries
+
+    category = _sitemap_category(db)
+    tr = _category_translation(db, category, "en")
+
+    entry = next(e for e in category_entries(db, "en") if e["loc"].endswith(tr.slug))
+    assert f"/en/c/{tr.slug}" in entry["loc"]
+
+
+def test_a_draft_category_translation_is_not_listed(db):
+    from repositories.sitemap import category_entries
+
+    category = _sitemap_category(db)
+    tr = _category_translation(db, category, "en", is_published=False)
+
+    assert tr.slug not in _slugs(category_entries(db, "en"))
+
+
+def test_a_deactivated_category_is_not_listed(db):
+    from repositories.sitemap import category_entries
+
+    category = _sitemap_category(db, active=False)
+    tr = _category_translation(db, category, "en")
+
+    assert tr.slug not in _slugs(category_entries(db, "en"))
+
+
+def test_a_category_marked_noindex_is_not_listed(db):
+    from repositories.sitemap import category_entries
+
+    category = _sitemap_category(db, indexable=False)
+    tr = _category_translation(db, category, "en")
+
+    assert tr.slug not in _slugs(category_entries(db, "en"))
+
+
+def test_a_category_cannot_be_published_without_a_meta_description(db):
+    """The thin-page case is unreachable, not merely filtered.
+
+    ck_category_translations_published_requires_content refuses the row
+    outright, so a published category always satisfies is_complete. The
+    sitemap's is_complete test is therefore belt-and-braces rather than the
+    thing doing the work -- worth knowing before someone deletes it as
+    redundant, because dropping the CHECK would make it load-bearing again.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    category = _sitemap_category(db)
+    with pytest.raises(IntegrityError):
+        _category_translation(db, category, "en", meta_description=None)
+    db.rollback()
+
+
+def test_a_category_in_both_languages_declares_both_as_alternates(db):
+    from repositories.sitemap import category_entries
+
+    category = _sitemap_category(db)
+    english = _category_translation(db, category, "en")
+    _category_translation(db, category, "ar", title="أحذية", slug=_uniq("احذية"))
+
+    entry = next(
+        e for e in category_entries(db, "en") if e["loc"].endswith(english.slug)
+    )
+    assert sorted(entry["alternates"]) == ["ar", "en"]
+
+
+def test_a_published_collection_is_listed_under_the_edit_prefix(db):
+    from repositories.sitemap import collection_entries
+
+    collection = _sitemap_collection(db)
+    tr = _collection_translation(db, collection, "en")
+
+    entry = next(
+        e for e in collection_entries(db, "en") if e["loc"].endswith(tr.slug)
+    )
+    assert f"/en/edit/{tr.slug}" in entry["loc"]
+
+
+def test_a_deactivated_collection_is_not_listed(db):
+    from repositories.sitemap import collection_entries
+
+    collection = _sitemap_collection(db, active=False)
+    tr = _collection_translation(db, collection, "en")
+
+    assert tr.slug not in _slugs(collection_entries(db, "en"))
+
+
+def test_the_locale_sitemap_carries_categories_collections_and_products(db):
+    """All three in one document. Split them and a crawler reading only the
+    first file would never see the category pages at all."""
+    from repositories.sitemap import sitemap_for_locale
+
+    category = _sitemap_category(db)
+    category_tr = _category_translation(db, category, "en")
+    collection = _sitemap_collection(db)
+    collection_tr = _collection_translation(db, collection, "en")
+
+    xml = sitemap_for_locale(db, "en")
+
+    assert f"/en/c/{category_tr.slug}" in xml
+    assert f"/en/edit/{collection_tr.slug}" in xml
+    assert "/en/products/" in xml

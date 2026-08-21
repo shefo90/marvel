@@ -16,6 +16,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.config import SITE_BASE_URL
+from models.categories import Category
+from models.category_translations import CategoryTranslation
+from models.collection_translations import CollectionTranslation
+from models.collections import Collection
 from models.locales import Locale
 from models.product_translations import ProductTranslation
 from models.products import Product
@@ -32,6 +36,15 @@ def product_url(locale: str, slug: str) -> str:
     segment has to change both.
     """
     return f"{SITE_BASE_URL}/{locale}/products/{slug}"
+
+
+def category_url(locale: str, slug: str) -> str:
+    """``/c/`` so an operator-chosen category slug can never shadow a product."""
+    return f"{SITE_BASE_URL}/{locale}/c/{slug}"
+
+
+def collection_url(locale: str, slug: str) -> str:
+    return f"{SITE_BASE_URL}/{locale}/edit/{slug}"
 
 
 def _indexable():
@@ -91,6 +104,81 @@ def sitemap_entries(db: Session, locale: str) -> list[dict]:
     return entries
 
 
+def _taxonomy_entries(
+    db: Session, locale: str, *, owner, translation, owner_id, url_for
+) -> list[dict]:
+    """Indexable category or collection URLs, with their hreflang clusters.
+
+    Same shape as ``sitemap_entries`` and the same rule, applied to a different
+    pair of tables. Written once and parameterised rather than copied, because
+    the interesting part is the predicate and two copies of it would drift.
+
+    Note that this is a *stricter* test than the one the navigation menu uses.
+    ``repositories.taxonomy`` shows a category in the menu on a published
+    translation alone, because a menu entry needs no meta description. Appearing
+    in a sitemap is a request to index, so it additionally requires
+    ``is_complete`` -- asking Google to crawl a page with no description is
+    asking it to index a thin one.
+    """
+    def indexable():
+        return (
+            translation.is_published.is_(True),
+            translation.robots_index.is_(True),
+            translation.is_complete.is_(True),
+            translation.canonical_override.is_(None),
+            owner.is_active.is_(True),
+            owner.is_indexable.is_(True),
+        )
+
+    rows = list(
+        db.execute(
+            select(translation)
+            .join(owner, owner.id == owner_id)
+            .where(translation.locale == locale, *indexable())
+            .order_by(translation.content_updated_at.desc())
+        ).scalars()
+    )
+    if not rows:
+        return []
+
+    ids = [getattr(row, owner_id.name) for row in rows]
+    siblings: dict[int, dict[str, str]] = {}
+    for row in db.execute(
+        select(translation)
+        .join(owner, owner.id == owner_id)
+        .where(owner_id.in_(ids), *indexable())
+    ).scalars():
+        siblings.setdefault(getattr(row, owner_id.name), {})[row.locale] = url_for(
+            row.locale, row.slug
+        )
+
+    entries = []
+    for row in rows:
+        cluster = siblings.get(getattr(row, owner_id.name), {})
+        entries.append({
+            "loc": url_for(row.locale, row.slug),
+            "lastmod": row.content_updated_at,
+            "alternates": cluster if len(cluster) > 1 else {},
+        })
+    return entries
+
+
+def category_entries(db: Session, locale: str) -> list[dict]:
+    return _taxonomy_entries(
+        db, locale, owner=Category, translation=CategoryTranslation,
+        owner_id=CategoryTranslation.__table__.c.category_id,
+        url_for=category_url,
+    )
+
+
+def collection_entries(db: Session, locale: str) -> list[dict]:
+    return _taxonomy_entries(
+        db, locale, owner=Collection, translation=CollectionTranslation,
+        owner_id=CollectionTranslation.__table__.c.collection_id,
+        url_for=collection_url,
+    )
+
+
 def _escape(value: str) -> str:
     return (
         value.replace("&", "&amp;")
@@ -106,7 +194,15 @@ def sitemap_for_locale(db: Session, locale: str) -> str:
         '<?xml version="1.0" encoding="UTF-8"?>',
         f'<urlset xmlns="{XML_NS}" xmlns:xhtml="{XHTML_NS}">',
     ]
-    for entry in sitemap_entries(db, locale):
+    # Categories and collections first: they are the shop's stable, hand-curated
+    # pages, and a crawler that reads only part of a large sitemap should meet
+    # those before the long tail of individual products.
+    entries = (
+        category_entries(db, locale)
+        + collection_entries(db, locale)
+        + sitemap_entries(db, locale)
+    )
+    for entry in entries:
         parts.append("  <url>")
         parts.append(f"    <loc>{_escape(entry['loc'])}</loc>")
         parts.append(f"    <lastmod>{entry['lastmod'].date().isoformat()}</lastmod>")
