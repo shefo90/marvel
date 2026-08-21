@@ -212,7 +212,15 @@ def test_reordering_refuses_a_list_that_is_not_the_whole_set(db, tmp_path, monke
     assert exc.value.status_code == 400
 
 
-def test_deleting_an_image_removes_its_files(db, tmp_path, monkeypatch):
+def test_the_files_outlive_the_delete_until_it_commits(db, tmp_path, monkeypatch):
+    """The unlink is queued, not performed, while the transaction is open.
+
+    This test previously asserted the opposite -- that the files were gone the
+    moment ``delete_image`` returned -- which is what made the pre-commit
+    ordering look correct for as long as it did. It was pinning the bug.
+    ``test_deleting_an_image_over_http`` covers the other half: once the request
+    commits, the files really are removed.
+    """
     monkeypatch.setattr("repositories.admin_images.storage.root", tmp_path)
     product = _product(db, "img-delete")
     image = _add(db, product)
@@ -221,7 +229,7 @@ def test_deleting_an_image_removes_its_files(db, tmp_path, monkeypatch):
 
     delete_image(db, _actor(db), image.id)
 
-    assert not (tmp_path / relative).exists()
+    assert (tmp_path / relative).exists(), "the transaction has not landed yet"
 
 
 def test_deleting_one_of_two_rows_sharing_a_file_keeps_the_file(db, tmp_path, monkeypatch):
@@ -521,9 +529,40 @@ def test_deleting_an_image_over_http(client, staff_token, http_product, tmp_path
         data={"alt_text": "A suede sandal"},
     )
     image_id = created.json()["id"]
+    relative = created.json()["url"].removeprefix("/media/")
+    assert (tmp_path / relative).exists()
 
     r = client.delete(f"/api/admin/images/{image_id}", headers=auth)
 
     assert r.status_code == 204, r.text
     loaded = client.get(f"/api/admin/products/{http_product}", headers=auth)
     assert loaded.json()["images"] == []
+    # The request committed, so the queued unlink has run. This is the half of
+    # the ordering contract that test_the_files_outlive_the_delete_until_it_commits
+    # cannot see, and it exercises the real after_commit wiring rather than
+    # calling run_pending by hand.
+    assert not (tmp_path / relative).exists()
+
+
+def test_a_rolled_back_delete_keeps_the_photograph(db, tmp_path, monkeypatch):
+    """The row and its file must survive or vanish together.
+
+    ``delete_image`` used to unlink the derivatives inside the transaction. If
+    the commit then failed -- a deadlock, a constraint tripped later in the same
+    request, a dropped connection -- the row came back and the photograph did
+    not, leaving a product pointing at a URL with nothing behind it. Storage has
+    no rollback, so the delete has to wait until the transaction is known to
+    have landed.
+    """
+    monkeypatch.setattr("repositories.admin_images.storage.root", tmp_path)
+    product = _product(db, "img-delete-rollback")
+    image = _add(db, product)
+    relative = image.url.removeprefix("/media/")
+
+    delete_image(db, _actor(db), image.id)
+    db.rollback()
+
+    assert (tmp_path / relative).exists(), (
+        "the transaction was rolled back, so the image row still exists — "
+        "its file must too"
+    )

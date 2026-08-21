@@ -21,6 +21,7 @@ from models.product_images import ProductImage
 from models.product_image_translations import ProductImageTranslation
 from models.products import Product
 from repositories.admin_catalog import _invalidate
+from services.cache_invalidation import on_commit
 from services.images import ImageRejected, derivatives, process_upload
 from services.storage import image_key, storage
 
@@ -192,8 +193,19 @@ def delete_image(db: Session, actor, image_id: int) -> None:
         key = url.removeprefix(storage.url_prefix + "/")
         stem, _, tail = key.rpartition("-")
         extension = tail.split(".")[-1]
-        for size in ("thumb", "card", "full"):
-            storage.delete(f"{stem}-{size}.{extension}")
+        doomed = [f"{stem}-{size}.{extension}" for size in ("thumb", "card", "full")]
+
+        # Deferred until the transaction lands. Storage has no rollback: unlink
+        # here and a commit that later fails leaves the row alive and its
+        # photograph gone, which is the one direction of this pair that cannot
+        # be repaired. Waiting risks the opposite -- an orphaned file if the
+        # process dies between commit and unlink -- and an orphaned file is
+        # bytes, while an orphaned row is a broken listing.
+        #
+        # The keys are computed now and captured by value. ``after_commit``
+        # fires on a session with no transaction, so the callable must not need
+        # to read anything back.
+        on_commit(db, lambda keys=doomed: [storage.delete(k) for k in keys])
 
     if was_primary:
         # Otherwise the product keeps its images but loses the one a listing

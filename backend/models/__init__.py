@@ -76,6 +76,12 @@ from .shipment_status_events import ShipmentStatusEvent
 from .order_returns import OrderReturn
 from .order_return_items import OrderReturnItem
 
+# --- Behaviour, not tables -------------------------------------------------
+# Imported last: it registers a flush listener against the models above, so
+# every one of them must already exist. Importing it for the side effect is the
+# point -- nothing references the module by name.
+from . import feed_timestamps  # noqa: F401
+
 __all__ = [
     "Locale",
     "User",
