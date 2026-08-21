@@ -28,3 +28,10 @@ Desktop.ini
 .DS_Store
 backend/media/
 storefront/dist/
+
+# Source photography handed over for import, not application assets.
+# scripts/import_local_images.py copies these into the media store, where the
+# app actually serves them from; the originals are large, are nobody's build
+# input, and belong in whatever the shop uses for master files.
+storefront/assets/shoes images/
+storefront/assets/bags/
