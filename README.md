@@ -26,7 +26,7 @@ behind them.
 | **S4 — commerce integrations** | COD works end to end. Background queue done — a Postgres outbox with retries, a dead-letter path and the cart sweeps. **Not done:** payment gateway, courier adapter |
 | **S5–S7** | Not started |
 
-345 backend tests, 70 admin tests, 50 storefront tests. Six migrations.
+394 backend tests, 70 admin tests, 50 storefront tests. Six migrations.
 
 **A shopper can browse in either language, add to a cart, check out with cash on delivery, and an
 operator can see the order and move it along.** What is missing is card payment, a courier

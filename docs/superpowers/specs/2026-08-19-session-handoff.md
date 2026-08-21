@@ -1,5 +1,9 @@
 # Session Handoff — 2026-08-19
 
+> **Superseded by [`2026-08-21-session-handoff.md`](2026-08-21-session-handoff.md).**
+> Kept for the reasoning behind decisions it records; every open item in it is closed or
+> restated there.
+
 **Start here.** Then [`../../../README.md`](../../../README.md). Everything before this document is
 superseded — including [`2026-08-18-session-handoff.md`](2026-08-18-session-handoff.md), whose every
 open item is now closed.
