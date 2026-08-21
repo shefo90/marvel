@@ -25,5 +25,14 @@ export default defineConfig({
     globals: true,
     setupFiles: './src/test/setup.js',
     css: false,
+    // Vitest's default is 5s, which these tests were already close to and
+    // started exceeding once the taxonomy screens took the suite past ninety
+    // tests. The timeouts were never in one place -- Login and ProductNew
+    // failed on runs where the new tests passed, and every one of them passes
+    // when its file is run alone -- so this is worker contention, not a slow
+    // test. An AntD form driven through userEvent with msw answering is simply
+    // not a 5s operation on a loaded machine, and a suite that fails randomly
+    // teaches people to re-run it rather than read it.
+    testTimeout: 20000,
   },
 });

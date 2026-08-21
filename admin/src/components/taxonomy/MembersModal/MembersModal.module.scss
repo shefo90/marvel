@@ -1,0 +1,40 @@
+@use '../../../assets/styles/variables' as v;
+
+.list {
+  list-style: none;
+  margin: 0 0 v.$space-lg;
+  padding: 0;
+  border: 1px solid rgb(0 0 0 / 6%);
+  border-radius: 6px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: v.$space-sm;
+  padding: v.$space-sm v.$space-md;
+
+  & + & {
+    border-top: 1px solid rgb(0 0 0 / 6%);
+  }
+}
+
+.position {
+  min-width: 1.5em;
+  opacity: 0.45;
+  font-variant-numeric: tabular-nums;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  padding: v.$space-lg;
+  opacity: 0.45;
+  text-align: center;
+}

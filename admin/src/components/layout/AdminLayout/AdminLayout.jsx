@@ -6,6 +6,8 @@ import styles from './AdminLayout.module.scss';
 
 const ITEMS = [
   { key: '/products', label: <Link to="/products">Products</Link> },
+  { key: '/categories', label: <Link to="/categories">Categories</Link> },
+  { key: '/collections', label: <Link to="/collections">Collections</Link> },
   { key: '/offers', label: <Link to="/offers">Offers</Link> },
   { key: '/orders', label: <Link to="/orders">Orders</Link> },
 ];
@@ -28,7 +30,9 @@ export default function AdminLayout() {
           theme="dark"
           mode="inline"
           selectedKeys={[
-            ['/orders', '/offers'].find((path) => location.pathname.startsWith(path)) ??
+            ['/orders', '/offers', '/categories', '/collections'].find((path) =>
+              location.pathname.startsWith(path),
+            ) ??
               '/products',
           ]}
           items={ITEMS}

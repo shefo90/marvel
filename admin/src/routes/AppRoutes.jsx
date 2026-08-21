@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import AdminLayout from '../components/layout/AdminLayout/AdminLayout.jsx';
+import Categories from '../pages/Categories/Categories.jsx';
+import Collections from '../pages/Collections/Collections.jsx';
 import Login from '../pages/Login/Login.jsx';
 import NotFound from '../pages/NotFound/NotFound.jsx';
 import ProductEdit from '../pages/ProductEdit/ProductEdit.jsx';
@@ -33,6 +35,8 @@ export default function AppRoutes() {
         <Route path="/products" element={<Products />} />
         <Route path="/products/new" element={<ProductNew />} />
         <Route path="/products/:id" element={<ProductEdit />} />
+        <Route path="/categories" element={<Categories />} />
+        <Route path="/collections" element={<Collections />} />
         <Route path="/offers" element={<Promotions />} />
         <Route path="/orders" element={<Orders />} />
         <Route path="/orders/:orderNumber" element={<OrderDetail />} />
