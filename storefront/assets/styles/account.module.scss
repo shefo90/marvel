@@ -1,0 +1,178 @@
+@use 'variables' as v;
+
+.panel {
+  max-width: 26rem;
+  margin: 0 auto;
+  padding: v.$space-xl 0;
+
+  h1 {
+    margin: 0 0 v.$space-lg;
+    font-size: v.$text-xl;
+    letter-spacing: v.$tracking-tight;
+  }
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-md;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-xs;
+
+  span {
+    font-size: v.$text-sm;
+    color: v.$ink-soft;
+  }
+
+  input {
+    padding: 0.7rem 0.85rem;
+    border: 1px solid v.$line;
+    border-radius: v.$radius-sm;
+    background: v.$surface;
+    color: v.$ink;
+    font: inherit;
+
+    &:focus-visible {
+      outline: 2px solid v.$accent;
+      outline-offset: 1px;
+    }
+  }
+}
+
+.primary {
+  display: inline-block;
+  padding: 0.75rem 1.25rem;
+  border: 0;
+  border-radius: v.$radius-pill;
+  background: v.$accent;
+  color: #fff;
+  font: inherit;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background v.$duration v.$ease;
+
+  &:hover {
+    background: v.$accent-ink;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: progress;
+  }
+}
+
+.error {
+  margin: 0 0 v.$space-md;
+  padding: v.$space-sm v.$space-md;
+  border-radius: v.$radius-sm;
+  background: v.$accent-wash;
+  color: v.$accent-ink;
+  font-size: v.$text-sm;
+}
+
+.aside {
+  margin-top: v.$space-lg;
+  font-size: v.$text-sm;
+  color: v.$ink-soft;
+}
+
+// --- the wider account pages ----------------------------------------------
+// Orders and addresses are lists rather than forms, so they get the page width
+// instead of the 26rem reading column the sign-in panel uses.
+
+.wide {
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: v.$space-xl 0;
+
+  h1 {
+    margin: 0;
+    font-size: v.$text-xl;
+    letter-spacing: v.$tracking-tight;
+  }
+
+  h2 {
+    margin: v.$space-xl 0 v.$space-md;
+    font-size: v.$text-lg;
+  }
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: v.$space-sm v.$space-md;
+  padding-bottom: v.$space-md;
+  border-bottom: 1px solid v.$line;
+}
+
+.actions {
+  display: flex;
+  gap: v.$space-md;
+  margin-inline-start: auto;
+  font-size: v.$text-sm;
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: v.$accent-ink;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid v.$line;
+  border-radius: v.$radius;
+  overflow: hidden;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));
+  align-items: center;
+  gap: v.$space-md;
+  padding: v.$space-md;
+  background: v.$surface;
+
+  & + & {
+    border-top: 1px solid v.$line-soft;
+  }
+
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+    gap: v.$space-xs;
+  }
+}
+
+.addressRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: v.$space-md;
+  padding: v.$space-md;
+  background: v.$surface;
+
+  & + & {
+    border-top: 1px solid v.$line-soft;
+  }
+}
+
+.badge {
+  margin-inline-start: v.$space-sm;
+  padding: 0.1rem 0.5rem;
+  border-radius: v.$radius-pill;
+  background: v.$accent-wash;
+  color: v.$accent-ink;
+  font-size: v.$text-xs;
+}

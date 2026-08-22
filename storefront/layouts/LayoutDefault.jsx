@@ -1,5 +1,6 @@
 import Footer from '../components/common/Footer/Footer.jsx';
 import Header from '../components/common/Header/Header.jsx';
+import { AccountProvider } from '../hooks/useAccount.jsx';
 import { CartProvider } from '../hooks/useCart.jsx';
 import { LocaleProvider } from '../hooks/useLocale.jsx';
 import { PageContextProvider } from '../hooks/usePageContext.jsx';
@@ -18,7 +19,8 @@ export default function Layout({ children, pageContext }) {
   return (
     <PageContextProvider pageContext={pageContext}>
       <LocaleProvider locale={locale} pathname={urlPathname}>
-        <CartProvider>
+        <AccountProvider>
+          <CartProvider>
           <a className="skip-link" href="#main">
             Skip to content
           </a>
@@ -27,7 +29,8 @@ export default function Layout({ children, pageContext }) {
             {children}
           </main>
           <Footer />
-        </CartProvider>
+          </CartProvider>
+        </AccountProvider>
       </LocaleProvider>
     </PageContextProvider>
   );

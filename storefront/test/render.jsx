@@ -1,5 +1,6 @@
 import { render } from '@testing-library/react';
 
+import { AccountProvider } from '../hooks/useAccount.jsx';
 import { CartProvider } from '../hooks/useCart.jsx';
 import { LocaleProvider } from '../hooks/useLocale.jsx';
 import { PageContextProvider } from '../hooks/usePageContext.jsx';
@@ -17,7 +18,9 @@ export function renderAt(ui, { locale = 'en', pathname = '/en', data = {} } = {}
   return render(
     <PageContextProvider pageContext={pageContext}>
       <LocaleProvider locale={locale} pathname={pathname}>
-        <CartProvider>{ui}</CartProvider>
+        <AccountProvider>
+          <CartProvider>{ui}</CartProvider>
+        </AccountProvider>
       </LocaleProvider>
     </PageContextProvider>,
   );

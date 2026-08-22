@@ -8,6 +8,7 @@ const COPY = {
   en: {
     shop: 'Shop',
     cart: 'Cart',
+    account: 'Your account',
     brand: 'Marvel',
     menu: 'Categories',
     all: 'View all',
@@ -17,6 +18,7 @@ const COPY = {
   ar: {
     shop: 'المتجر',
     cart: 'السلة',
+    account: 'حسابك',
     brand: 'مارفل',
     menu: 'الأقسام',
     all: 'عرض الكل',
@@ -136,6 +138,30 @@ export default function Header() {
               </li>
             ))}
           </ul>
+
+          {/* Before the cart, so the tab order is identity then basket -- and
+              deliberately not a sign-in/sign-out toggle. Whether anyone is
+              signed in is only known after hydration, so a header that renders
+              one or the other would flicker on every page load. The link says
+              the same thing either way and the page behind it decides. */}
+          <a className={styles.account} href={href('/account')}>
+            <span aria-hidden="true" className={styles.cartGlyph}>
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
+                <path
+                  d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                />
+                <path
+                  d="M4.5 20a7.5 7.5 0 0 1 15 0"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </span>
+            <span className="visually-hidden">{copy.account}</span>
+          </a>
 
           <a className={styles.cart} href={href('/cart')}>
             <span aria-hidden="true" className={styles.cartGlyph}>

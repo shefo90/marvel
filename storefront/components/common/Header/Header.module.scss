@@ -177,6 +177,17 @@
   &:hover { color: v.$accent-ink; }
 }
 
+// Same affordance as the cart, so the two read as one control group rather
+// than a link that happens to sit beside a button.
+.account {
+  color: v.$ink;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+
+  &:hover { color: v.$accent-ink; }
+}
+
 .cartGlyph { display: inline-flex; }
 
 // Always rendered, including at zero. A badge that appears only once something
