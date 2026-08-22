@@ -154,3 +154,15 @@ class product_list_response(BaseModel):
     item_list_name: str | None = None
     sort: str = "featured"
     facets: listing_facets = listing_facets()
+
+
+class product_search_response(product_list_response):
+    """A listing, plus the term that produced it.
+
+    Echoed back rather than left to the client to remember: the results page
+    prints it, and section 5's ``search`` event has to report the term the
+    server actually searched for, not the one that was typed into the box a
+    moment before a redirect.
+    """
+
+    query: str = ""

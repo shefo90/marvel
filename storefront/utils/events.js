@@ -52,6 +52,26 @@ export function viewItemList(products, { listId, listName, locale }) {
   return { event: 'view_item_list', item_list_id: listId, item_list_name: listName, locale, items };
 }
 
+/**
+ * GA4's `search`, section 5.
+ *
+ * `term` is what the *server* searched for, echoed back in the response, not
+ * the raw contents of the box. The two differ whenever the query was trimmed or
+ * refused, and a search report is read to decide what to stock -- counting a
+ * term nobody actually searched for makes that decision on fiction.
+ *
+ * `results` is included because a term with no results is the most actionable
+ * row in the whole report: a shopper naming something the shop does not sell.
+ */
+export function search(term, { locale, resultCount } = {}) {
+  return {
+    event: 'search',
+    search_term: (term ?? '').trim(),
+    results: resultCount,
+    locale,
+  };
+}
+
 export function selectItem(product, { index, listId, listName, locale }) {
   return {
     event: 'select_item',

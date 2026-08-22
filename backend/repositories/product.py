@@ -19,7 +19,7 @@ Serving English under ``/ar/`` would create a near-duplicate page and, worse,
 would make the hreflang cluster claim an Arabic version that does not exist.
 """
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from models.attribute_value_translations import AttributeValueTranslation
@@ -177,6 +177,52 @@ def _effective_price():
     return func.coalesce(ProductVariant.sale_price, ProductVariant.price)
 
 
+def _matches_query(q: str, locale: str):
+    """The search predicate: stemmed words, then prefixes, then near-misses.
+
+    Three clauses because they answer three different shopper behaviours and
+    none of them subsumes the others:
+
+    - ``search_vector @@ plainto_tsquery`` matches whole words with stemming, so
+      an English "sandals" finds a "Sandal" and the Arabic stemmer earns its
+      keep. It cannot match a partial word.
+    - ``LIKE '%...%'`` on the folded text matches prefixes and mid-word
+      fragments -- somebody typing "espad" before they have finished. The GIN
+      trigram index services this; it is not a sequential scan.
+    - ``word_similarity() > 0.5`` catches typos ("sandel" for "sandal").
+
+    **It has to be ``word_similarity`` and not ``similarity``**, and the
+    difference is not academic. ``similarity`` compares the query against the
+    *whole* stored document, so a six-letter word measured against a
+    seventy-character title-plus-description scores 0.08 -- below any usable
+    threshold. ``word_similarity`` scores the query against the best-matching
+    run of words inside the document, which for the same pair is 0.57. The first
+    version of this used ``similarity`` and passed its unit test only because
+    that test's fixture had a one-word description; against the real catalogue
+    "sandel" returned nothing at all. The threshold is 0.5 rather than pg_trgm's
+    0.6 default because 0.571 is what a single substituted letter costs.
+
+    Brand is matched separately because it lives on ``products`` and a generated
+    column cannot reach another table. It has its own expression index.
+
+    The query is folded with the same ``marvel_fold`` the stored columns were
+    built with. That is the one invariant search cannot survive breaking, and it
+    is why the function is called on both sides rather than reimplemented in
+    Python.
+    """
+    folded = func.marvel_fold(q)
+    config = "arabic" if locale == "ar" else "english"
+
+    return or_(
+        ProductTranslation.search_vector.op("@@")(
+            func.plainto_tsquery(config, folded)
+        ),
+        ProductTranslation.search_text.like(func.concat("%", folded, "%")),
+        func.word_similarity(folded, ProductTranslation.search_text) > 0.5,
+        func.marvel_fold(Product.brand).like(func.concat("%", folded, "%")),
+    )
+
+
 def _variant_exists(sizes, colors, in_stock, min_price, max_price):
     """A product matches when ONE active variant satisfies every filter at once.
 
@@ -241,6 +287,7 @@ def list_products(
     max_price=None,
     in_stock: bool = False,
     sort: str = "featured",
+    q: str | None = None,
 ) -> dict:
     """Paged, filtered, sorted listing — the query behind every browse page.
 
@@ -312,6 +359,8 @@ def list_products(
                 ).join(
                     Collection, Collection.id == CollectionProduct.collection_id
                 ).where(Collection.slug == collection_slug)
+            if q:
+                stmt = stmt.where(_matches_query(q, locale))
             return stmt.where(
                 _variant_exists(
                     None if ignore == "size" else sizes,
@@ -532,6 +581,13 @@ def list_products(
                 },
             },
         }
+
+    if q:
+        # Not cached, deliberately. A search term is unbounded key space: most
+        # queries are typed once and never again, so caching them fills Redis
+        # with single-use entries and evicts the category pages that are hit
+        # thousands of times. The indexes are what make this fast.
+        return load()
 
     ckey = cache.key(
         cache.NS_LISTING,

@@ -42,6 +42,24 @@ export async function listProducts(locale, options = {}) {
   return response.data;
 }
 
+/**
+ * Search. Same shape as a listing, plus the query the server actually ran.
+ *
+ * Separate from `listProducts` rather than another option on it, because the
+ * endpoints differ in what they may be cached as: a listing is `public`, a
+ * search response is `private`. Folding them together would eventually put one
+ * shopper's search behind a shared cache key.
+ */
+export async function searchProducts(locale, options = {}) {
+  const { q = '', page = 1, pageSize = 24, sizes = [], colors = [], sort } = options;
+
+  const response = await api.get(`/${locale}/search`, {
+    params: { q, page, page_size: pageSize, size: sizes, color: colors, sort },
+    paramsSerializer: { indexes: null },
+  });
+  return response.data;
+}
+
 export async function getProduct(locale, slug) {
   const response = await api.get(`/${locale}/products/${encodeURIComponent(slug)}`);
   return response.data;

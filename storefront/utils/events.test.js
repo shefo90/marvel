@@ -1,6 +1,14 @@
 import { expect, it } from 'vitest';
 
-import { addToCart, beginCheckout, purchase, toItem, viewItem, viewItemList } from './events.js';
+import {
+  addToCart,
+  beginCheckout,
+  purchase,
+  search,
+  toItem,
+  viewItem,
+  viewItemList,
+} from './events.js';
 
 const PRODUCT = {
   slug: 'suede-sandal',
@@ -133,4 +141,25 @@ it('never emits NaN for a missing number', () => {
 
   expect(event.value).toBe(0);
   expect(Number.isNaN(event.value)).toBe(false);
+});
+
+it('reports a search with the term the server actually searched for', () => {
+  // GA4's `search` event keys on `search_term`. Sending the raw box contents
+  // instead of what came back means the report counts a term that may have
+  // been trimmed or rejected -- and search reports are read to decide what to
+  // stock.
+  const event = search('  Sandal  ', { locale: 'en', resultCount: 3 });
+
+  expect(event.event).toBe('search');
+  expect(event.search_term).toBe('Sandal');
+  expect(event.locale).toBe('en');
+});
+
+it('reports a search that found nothing, because that is the useful one', () => {
+  // A term with no results is the single most actionable row in a search
+  // report: it is a shopper asking for something the shop does not list.
+  const event = search('xylophone', { locale: 'en', resultCount: 0 });
+
+  expect(event.search_term).toBe('xylophone');
+  expect(event.results).toBe(0);
 });

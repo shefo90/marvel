@@ -9,6 +9,8 @@ const COPY = {
     shop: 'Shop',
     cart: 'Cart',
     account: 'Your account',
+    search: 'Search',
+    searchPlaceholder: 'Search for a product',
     brand: 'Marvel',
     menu: 'Categories',
     all: 'View all',
@@ -19,6 +21,8 @@ const COPY = {
     shop: 'المتجر',
     cart: 'السلة',
     account: 'حسابك',
+    search: 'بحث',
+    searchPlaceholder: 'ابحث عن منتج',
     brand: 'مارفل',
     menu: 'الأقسام',
     all: 'عرض الكل',
@@ -138,6 +142,24 @@ export default function Header() {
               </li>
             ))}
           </ul>
+
+          {/* A plain GET form, so a search has a URL that can be linked,
+              shared and reloaded. Submitting navigates; nothing here depends
+              on JavaScript having loaded, which matters most on the slow
+              connection where somebody is most likely to search rather than
+              browse. */}
+          <form className={styles.search} method="get" action={href('/search')} role="search">
+            <label className="visually-hidden" htmlFor="header-search">
+              {copy.search}
+            </label>
+            <input
+              id="header-search"
+              type="search"
+              name="q"
+              placeholder={copy.searchPlaceholder}
+              autoComplete="off"
+            />
+          </form>
 
           {/* Before the cart, so the tab order is identity then basket -- and
               deliberately not a sign-in/sign-out toggle. Whether anyone is

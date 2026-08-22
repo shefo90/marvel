@@ -179,6 +179,35 @@
 
 // Same affordance as the cart, so the two read as one control group rather
 // than a link that happens to sit beside a button.
+.search {
+  display: flex;
+
+  input {
+    width: 12rem;
+    padding: 0.45rem 0.85rem;
+    border: 1px solid v.$line;
+    border-radius: v.$radius-pill;
+    background: v.$ground;
+    color: v.$ink;
+    font: inherit;
+    font-size: v.$text-sm;
+    transition: width v.$duration v.$ease, background v.$duration v.$ease;
+
+    &:focus-visible {
+      width: 16rem;
+      background: v.$surface;
+      outline: 2px solid v.$accent;
+      outline-offset: 1px;
+    }
+  }
+
+  // Below the fold of a phone header there is no room for it; the search page
+  // is still reachable from the footer and by URL.
+  @media (max-width: 720px) {
+    display: none;
+  }
+}
+
 .account {
   color: v.$ink;
   text-decoration: none;
