@@ -11,7 +11,7 @@
 # compose passes `:80`, which serves plain HTTP against the server's IP address
 # -- what you want before DNS exists.
 #
-# The default lives in docker-compose.prod.yml rather than here as
+# The default lives in docker-compose.yml rather than here as
 # `{$SITE_DOMAIN::80}`. Caddy's inline default only applies when the variable is
 # *unset*, and compose always sets it -- to an empty string when you have no
 # domain. That collapsed this line to a bare `{`, which Caddy then read as the

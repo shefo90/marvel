@@ -1,6 +1,8 @@
 # Deploying to a VPS
 
-The whole shop in seven containers behind one proxy. Everything is reachable at
+The whole shop in seven containers behind one proxy. **One `docker-compose.yml`
+for development and production** -- the difference between them is `.env`, not a
+second compose file. Everything is reachable at
 a single origin, because that is what the applications assume: the admin calls
 `/api/...` relative, the shopper's session cookie is scoped to `/api` on the
 same host, and the API has no CORS middleware to make a split origin work.
@@ -13,8 +15,11 @@ same host, and the API has no CORS middleware to make a split origin work.
 | `/media/*` | API — uploaded photographs |
 | `/robots.txt`, `/sitemap*.xml` | API |
 
-Only Caddy publishes a port. The database, Redis, the API, the worker and both
-frontends are reachable on the internal network only.
+Caddy is the only service bound to every interface. Postgres, Redis and the API
+publish to `127.0.0.1` only -- reachable from the server itself for psql, curl
+and the test suite, and from the internet not at all. The storefront and the
+back-office publish nothing, which also leaves ports 3000 and 5173 free for
+`npm run dev`.
 
 ---
 
@@ -23,11 +28,16 @@ frontends are reachable on the internal network only.
 ```sh
 git clone <repo> /srv/marvel && cd /srv/marvel
 
-cp .env.production.example .env.production
-# Fill in SECRET_KEY, POSTGRES_PASSWORD and PUBLIC_ORIGIN. The file tells you
-# how to generate the two secrets. Leave SITE_DOMAIN empty for now.
+cp .env.example .env
+# Fill in SECRET_KEY, POSTGRES_PASSWORD, PUBLIC_ORIGIN and COOKIE_SECURE=1.
+# The file tells you how to generate the two secrets. Leave SITE_DOMAIN empty
+# until DNS resolves.
+#
+# Locally you can skip this entirely: docker-compose.yml carries a development
+# default for every one of them. Those defaults are public, which is precisely
+# why a deployment cannot use them.
 
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+docker compose up -d --build
 ```
 
 The API runs `alembic upgrade head` on start, so the schema is created and
@@ -46,14 +56,14 @@ A brand-new shop has no products. Either add them through `/admin`, or seed the
 demo catalogue to see the thing working:
 
 ```sh
-docker compose -f docker-compose.prod.yml --env-file .env.production \
+docker compose \
   exec api sh -c "python scripts/seed_taxonomy.py && python scripts/seed_demo_catalogue.py"
 ```
 
 Create the first staff login:
 
 ```sh
-docker compose -f docker-compose.prod.yml --env-file .env.production \
+docker compose \
   exec api python scripts/bootstrap_admin.py
 ```
 
@@ -62,11 +72,11 @@ docker compose -f docker-compose.prod.yml --env-file .env.production \
 Point an A record at the server, wait for it to resolve, then:
 
 ```sh
-# in .env.production
+# in .env
 SITE_DOMAIN=marvelshop.example
 PUBLIC_ORIGIN=https://marvelshop.example
 
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+docker compose up -d
 ```
 
 Caddy obtains the certificate on start and renews it on its own — no certbot, no
@@ -83,7 +93,7 @@ issuance for a week.
 
 ```sh
 git pull
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+docker compose up -d --build
 ```
 
 Migrations run automatically. Rebuilt containers replace running ones one at a
@@ -111,10 +121,11 @@ up is not a backup.
 
 ## Things worth knowing
 
-**`COOKIE_SECURE=1` is set in the compose file and must stay set.** Behind a
-TLS-terminating proxy the application sees plain HTTP, so without it the
-shopper's refresh cookie is issued without `Secure` and will travel in clear
-text on any downgrade.
+**Set `COOKIE_SECURE=1` in `.env` for production.** Left empty, the API decides
+from the request scheme, which is already correct behind Caddy with
+`--proxy-headers` — so this is belt and braces rather than the only thing
+holding the cookie's `Secure` flag on. It also arms the SECRET_KEY check below,
+which is the real reason not to skip it.
 
 **The API refuses to start** if `SECRET_KEY` is missing or still the development
 value while `COOKIE_SECURE` is on. That check exists because the development key

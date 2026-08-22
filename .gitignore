@@ -35,3 +35,6 @@ storefront/dist/
 # input, and belong in whatever the shop uses for master files.
 storefront/assets/shoes images/
 storefront/assets/bags/
+
+# Local backup output. These contain real order data.
+backups/

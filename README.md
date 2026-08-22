@@ -35,17 +35,36 @@ integration, server-side measurement, and the catalogue feeds.
 ## Running it
 
 ```bash
-docker compose up --build
+docker compose up -d --build       # the whole shop, on http://localhost
 ```
+
+One compose file runs everything: Postgres, Redis, the API, the worker, the
+storefront, the back-office and a Caddy proxy in front. The difference between
+development and production is `.env`, not a second file — see
+[deploy/README.md](deploy/README.md).
+
+- Shop: http://localhost → redirects to /en
+- Back-office: http://localhost/admin/
+- API docs: http://localhost:8000/docs
+- Health: http://localhost/api/health — reports Postgres and Redis independently
 
 Postgres is published on **5433**, not 5432, so it will not collide with a PostgreSQL already running on
 your host. Redis is on the standard 6379 — if you have a standalone Redis container from earlier, remove
 it first (`docker rm -f marvel-redis`) or the bind fails.
 
-Migrations run automatically before the API accepts traffic. Then:
+All three are bound to `127.0.0.1`, so they are reachable from this machine and
+from nowhere else — which is what makes the same file safe to run on a VPS. The
+storefront and back-office publish nothing at all, leaving ports 3000 and 5173
+free for `npm run dev` while the stack is up.
 
-- API docs: http://localhost:8000/docs
-- Health: http://localhost:8000/health — reports Postgres and Redis independently
+Migrations run automatically before the API accepts traffic.
+
+Just the pieces you need is still one command:
+
+```bash
+docker compose up -d redis         # what the backend test suite wants
+docker compose up -d db redis
+```
 
 Seed some catalog data:
 
@@ -63,7 +82,9 @@ change.
 
 **Back up the `marvel_media` volume.** Uploaded images are the only application state that is not
 in Postgres, so a database backup does not cover them. Losing that volume loses every product
-photo while the rows that point at them survive.
+photo while the rows that point at them survive. `deploy/backup.sh` takes both,
+and [deploy/RESTORE.md](deploy/RESTORE.md) is the procedure to rehearse before
+you need it.
 
 ## Running it without Docker
 

@@ -19,9 +19,25 @@
 
 set -eu
 
+# Git Bash on Windows rewrites arguments that look like absolute paths, so
+# "/backup/x.tar.gz" meant for the container becomes "C:/Program Files/Git/...".
+# Harmless everywhere else; without it this script cannot be tested on the
+# machine most likely to be running it during development.
+export MSYS_NO_PATHCONV=1
+
 DEST="${1:-./backups}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
-COMPOSE="docker compose -f docker-compose.prod.yml --env-file .env.production"
+COMPOSE="docker compose"
+
+# Compose prefixes volume names with the project, which defaults to the
+# directory name. Derived rather than hardcoded because the first version of
+# this script guessed "marvel_marvel_media" while the real volume was
+# "marvel_website_marvel_media" -- and `docker run -v` CREATES a volume that
+# does not exist rather than failing, so it produced a valid, perfectly empty
+# archive every night. A backup that looks fine and contains nothing is worse
+# than no backup at all.
+PROJECT="${COMPOSE_PROJECT_NAME:-$(basename "$(pwd)")}"
+MEDIA_VOLUME="${PROJECT}_marvel_media"
 KEEP_DAYS="${KEEP_DAYS:-14}"
 
 mkdir -p "$DEST"
@@ -36,14 +52,32 @@ $COMPOSE exec -T db pg_dump \
     --clean --if-exists -Fc \
     > "$DEST/marvel-db-$STAMP.dump"
 
-echo "==> uploaded media"
+echo "==> uploaded media  (volume: $MEDIA_VOLUME)"
+
+# Refuse to back up a volume that does not exist, rather than letting docker
+# helpfully create an empty one. See the note on MEDIA_VOLUME above.
+if ! docker volume inspect "$MEDIA_VOLUME" >/dev/null 2>&1; then
+    echo "  ERROR: no such volume: $MEDIA_VOLUME" >&2
+    docker volume ls --format '    {{.Name}}' | grep marvel >&2 || true
+    echo "  Set COMPOSE_PROJECT_NAME if this project runs under another name." >&2
+    exit 1
+fi
 # Read out of the volume through a throwaway container rather than from the
 # API container, so this still works when the stack is down -- which is when
 # you are most likely to want a backup.
 docker run --rm \
-    -v marvel_marvel_media:/data:ro \
+    -v "$MEDIA_VOLUME":/data:ro \
     -v "$(cd "$DEST" && pwd):/backup" \
     alpine tar czf "/backup/marvel-media-$STAMP.tar.gz" -C /data .
+
+# An archive of an empty volume is about 45 bytes, which is the exact shape
+# this script used to produce silently. Loud is better.
+MEDIA_BYTES=$(wc -c < "$DEST/marvel-media-$STAMP.tar.gz")
+if [ "$MEDIA_BYTES" -lt 200 ]; then
+    echo "  WARNING: media archive is ${MEDIA_BYTES} bytes -- almost certainly empty." >&2
+    echo "  If this shop has photographs, something is wrong:" >&2
+    echo "    docker run --rm -v $MEDIA_VOLUME:/data alpine ls -R /data | head" >&2
+fi
 
 echo "==> pruning backups older than $KEEP_DAYS days"
 find "$DEST" -name 'marvel-db-*.dump' -mtime "+$KEEP_DAYS" -delete

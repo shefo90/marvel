@@ -17,8 +17,8 @@ missing image.
 ## 1. Bring up the stack
 
 ```sh
-cp .env.production.example .env.production   # fill in SECRET_KEY, POSTGRES_PASSWORD, PUBLIC_ORIGIN
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d db
+cp .env.example .env   # fill in SECRET_KEY, POSTGRES_PASSWORD, PUBLIC_ORIGIN
+docker compose up -d db
 ```
 
 Only the database. The API runs migrations on start, and letting it do that
@@ -27,7 +27,7 @@ against a database you are about to overwrite wastes time at best.
 ## 2. Restore the database
 
 ```sh
-docker compose -f docker-compose.prod.yml --env-file .env.production \
+docker compose \
   exec -T db pg_restore -U marvel -d marvel --clean --if-exists \
   < backups/marvel-db-<stamp>.dump
 ```
@@ -40,19 +40,27 @@ for objects that did not exist to drop. Those lines are normal.
 
 ```sh
 docker run --rm \
-  -v marvel_marvel_media:/data \
+  -v marvel_website_marvel_media:/data \
   -v "$PWD/backups:/backup:ro" \
   alpine sh -c "rm -rf /data/* && tar xzf /backup/marvel-media-<stamp>.tar.gz -C /data"
 ```
 
-The volume name has the project prefix on it (`marvel_` from `name: marvel` in
-the compose file, plus the volume's own `marvel_media`). `docker volume ls` if
-in doubt.
+The volume name is the compose project prefix — the directory name, so
+`marvel_website` — plus the volume's own name. Confirm it rather than trusting
+this line:
+
+```sh
+docker volume ls | grep marvel
+```
+
+Getting it wrong does not fail. `docker run -v` creates a volume that does not
+exist, so a typo restores nothing into a brand-new empty volume and reports
+success. That is exactly how the backup script shipped its first version.
 
 ## 4. Start everything
 
 ```sh
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+docker compose up -d --build
 ```
 
 The API runs `alembic upgrade head` on start, so a dump taken from an older
