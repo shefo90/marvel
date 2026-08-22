@@ -35,10 +35,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from sqlalchemy import delete, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.orm import Session
 
 from models.carts import Cart
+from models.customer_merge import CustomerMerge
+from models.customers import Customer
 from models.orders import Order
 
 
@@ -67,5 +69,71 @@ def delete_orders(db: Session, order_ids: Iterable[int]) -> int:
     # A Core delete, so the cascade is the database's to run rather than
     # SQLAlchemy's to simulate one collection at a time.
     result = db.execute(delete(Order).where(Order.id.in_(ids)))
+    db.flush()
+    return result.rowcount
+
+
+def delete_customers(db: Session, customer_ids: Iterable[int]) -> int:
+    """Delete these customers, clearing the references that would refuse it.
+
+    The same accumulation as ``delete_orders``, one table along.
+    ``test_cart_and_orders.py`` resolves a guest customer for every checkout it
+    performs, so the development database had built up 988 of them beside the
+    1,115 orders.
+
+    Customers are harder to remove than orders because most of what points at
+    them cascades, but four references are ``ON DELETE RESTRICT`` and the
+    database simply refuses instead:
+
+    - ``orders.customer_id`` -- **not** handled here. A customer who has ordered
+      is skipped rather than having their orders deleted underneath them:
+      erasing sales history as a side effect of tidying up a customer row is not
+      a decision this function gets to make. The purge fixture calls
+      ``delete_orders`` first, so a customer whose orders were also created by
+      the test is gone by the time this runs.
+    - ``customer_merge`` twice, and ``customers.merged_into_customer_id`` -- all
+      three are cleared here, because none of them is history about money. A
+      merge record for a customer who no longer exists describes nothing.
+
+    Returns how many were actually deleted, which may be fewer than were asked
+    for. Skipping quietly is right for a cleanup that runs after every test;
+    raising would turn a passing test red for a row it does not own.
+    """
+    ids = [int(i) for i in customer_ids]
+    if not ids:
+        return 0
+
+    still_ordering = set(
+        db.execute(
+            select(Order.customer_id).where(Order.customer_id.in_(ids))
+        ).scalars()
+    )
+    doomed = [i for i in ids if i not in still_ordering]
+    if not doomed:
+        return 0
+
+    db.execute(
+        delete(CustomerMerge).where(
+            or_(
+                CustomerMerge.surviving_customer_id.in_(doomed),
+                CustomerMerge.merged_customer_id.in_(doomed),
+            )
+        )
+    )
+    # A survivor pointing at a doomed row blocks the delete, and the survivor is
+    # not ours to remove. All three columns move together:
+    # ``ck_customers_merge_consistency`` is a biconditional -- the pointer, the
+    # timestamp and ``status = 'merged'`` are legal only as a set -- so nulling
+    # the pointer alone is refused, exactly as nulling a cart's
+    # converted_order_id alone is. The row becomes 'active' again because a
+    # customer merged into someone who no longer exists stands on their own.
+    db.execute(
+        update(Customer)
+        .where(Customer.merged_into_customer_id.in_(doomed))
+        .values(merged_into_customer_id=None, merged_at=None, status="active")
+    )
+    db.flush()
+
+    result = db.execute(delete(Customer).where(Customer.id.in_(doomed)))
     db.flush()
     return result.rowcount

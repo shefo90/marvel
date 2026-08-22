@@ -9,6 +9,7 @@ from sqlalchemy import text
 from core.config import MEDIA_ROOT, MEDIA_URL_PREFIX
 from core.db import Engine
 from routes import (
+    account,
     admin_catalog,
     admin_images,
     admin_orders,
@@ -66,6 +67,7 @@ app.include_router(product.router)
 app.include_router(register.router)
 app.include_router(auth.router)
 app.include_router(refresh.router)
+app.include_router(account.router)
 app.include_router(cart.router)
 app.include_router(order.router)
 

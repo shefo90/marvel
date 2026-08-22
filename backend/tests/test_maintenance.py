@@ -140,3 +140,108 @@ def test_delete_orders_reports_how_many_it_removed(db):
     order = _order(db, "ORD-PURGE-4")
 
     assert delete_orders(db, [order.id, 999_999_999]) == 1
+
+
+# --- customers -----------------------------------------------------------
+#
+# The same accumulation as orders, one table along and found the same way: the
+# checkout tests resolve a guest customer per order and nothing removed them,
+# so the development database had built up 988. Customers are harder to delete
+# than orders because four references are ON DELETE RESTRICT -- orders,
+# customer_merge twice, and customers' own merged_into_customer_id -- so the
+# database refuses rather than cascading, and the order of operations is the
+# whole job.
+
+def _bare_customer(db, email: str) -> Customer:
+    customer = Customer(email=email, status="active")
+    db.add(customer)
+    db.flush()
+    return customer
+
+
+def test_delete_customers_removes_one_with_nothing_attached(db):
+    from repositories.maintenance import delete_customers
+
+    customer = _bare_customer(db, "purge-plain@example.com")
+    customer_id = customer.id
+
+    assert delete_customers(db, [customer_id]) == 1
+    assert db.get(Customer, customer_id) is None
+
+
+def test_delete_customers_skips_one_who_has_ordered(db):
+    """orders.customer_id is ON DELETE RESTRICT, and erasing sales history as a
+    side effect of tidying a customer row is not this function's call to make.
+    The purge fixture removes the test's orders first, so a customer whose
+    orders were also created by the test is gone by the time this runs."""
+    from repositories.maintenance import delete_customers
+
+    customer = _bare_customer(db, "purge-ordered@example.com")
+    order = Order(
+        order_number="ORD-PURGE-CUST", customer_id=customer.id,
+        status="pending", payment_status="pending", payment_method="cod",
+        locale="en", currency="EGP",
+        subtotal=Decimal("10.00"), discount=Decimal("0.00"),
+        tax_total=Decimal("0.00"), shipping=Decimal("0.00"),
+        total=Decimal("10.00"), gross_order_value=Decimal("10.00"),
+        cod_amount=Decimal("10.00"), cod_collection_status="pending",
+        placed_at=datetime.now(timezone.utc),
+    )
+    db.add(order)
+    db.flush()
+    customer_id = customer.id
+
+    assert delete_customers(db, [customer_id]) == 0
+    assert db.get(Customer, customer_id) is not None
+
+
+def test_delete_customers_releases_a_merge_pointer_aimed_at_them(db):
+    """customers.merged_into_customer_id is a RESTRICT self-reference, so a
+    survivor pointing at a doomed row blocks the delete.
+
+    ck_customers_merge_consistency makes this the carts problem again: the
+    pointer, merged_at and status='merged' are legal only as a set, so the
+    release has to move all three at once.
+    """
+    from repositories.maintenance import delete_customers
+
+    doomed = _bare_customer(db, "purge-merge-target@example.com")
+    survivor = _bare_customer(db, "purge-merge-source@example.com")
+    survivor.merged_into_customer_id = doomed.id
+    survivor.merged_at = datetime.now(timezone.utc)
+    survivor.status = "merged"
+    db.flush()
+    doomed_id, survivor_id = doomed.id, survivor.id
+
+    delete_customers(db, [doomed_id])
+
+    assert db.get(Customer, doomed_id) is None
+    db.expire(db.get(Customer, survivor_id))
+    kept = db.get(Customer, survivor_id)
+    assert kept is not None, "the survivor must not be taken with it"
+    assert kept.merged_into_customer_id is None
+    assert kept.merged_at is None
+    assert kept.status == "active"
+
+
+def test_delete_customers_takes_the_credential_with_it(db):
+    from models.customer_credential import CustomerCredential
+    from repositories.maintenance import delete_customers
+
+    customer = _bare_customer(db, "purge-cred@example.com")
+    db.add(CustomerCredential(customer_id=customer.id, password_hash="x"))
+    db.flush()
+    customer_id = customer.id
+
+    delete_customers(db, [customer_id])
+
+    remaining = db.query(CustomerCredential).filter(
+        CustomerCredential.customer_id == customer_id
+    ).count()
+    assert remaining == 0
+
+
+def test_delete_customers_ignores_an_id_that_is_already_gone(db):
+    from repositories.maintenance import delete_customers
+
+    assert delete_customers(db, [999_999_999]) == 0
