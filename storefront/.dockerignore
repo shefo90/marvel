@@ -1,0 +1,13 @@
+# Rebuilt inside the image against the image's own platform. Copying the host's
+# node_modules in is both slower and a source of native-module mismatches.
+node_modules/
+dist/
+
+.env
+*.env
+!*.env.example
+
+# Test files do not belong in a runtime image.
+test/
+**/*.test.js
+**/*.test.jsx

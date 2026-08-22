@@ -1,0 +1,195 @@
+# The whole shop, production shape.
+#
+#     cp .env.production.example .env.production
+#     # edit it: SECRET_KEY and POSTGRES_PASSWORD at minimum
+#     docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# **Deliberately a separate file from docker-compose.yml.** That one is the
+# development stack the README and the handoff document describe -- Postgres on
+# 5433 so it never collides with a host install, Redis on 6379, and the
+# frontends run from `npm run dev` on the host. Restructuring it into a
+# base-plus-override pair would have been tidier and would have broken a
+# workflow that is written down in two places and in people's fingers. This file
+# stands alone instead.
+#
+# Nothing here publishes a port except Caddy. The database, Redis, the API, the
+# worker and both frontends are reachable only on the internal network, so the
+# only thing exposed to the internet is the one process whose job that is. A VPS
+# with 5432 open to the world is how a small shop's database ends up for sale.
+
+name: marvel
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-marvel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.production}
+      POSTGRES_DB: ${POSTGRES_DB:-marvel}
+    volumes:
+      - marvel_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-marvel} -d ${POSTGRES_DB:-marvel}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Survives a restart, which matters less for a cache than it looks: the
+    # point is that an eviction policy is set at all. Without one Redis fills
+    # and starts refusing writes instead of dropping the coldest key.
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - marvel_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_URL: postgresql+psycopg2://${POSTGRES_USER:-marvel}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-marvel}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env.production}
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+      REFRESH_TOKEN_EXPIRE_DAYS: "14"
+      # Required behind a TLS-terminating proxy. The app sees plain HTTP from
+      # Caddy, so the shopper's refresh cookie would be issued without Secure
+      # and would travel in clear text on any downgrade. See
+      # backend/services/session_cookies.py.
+      COOKIE_SECURE: "1"
+      # The API's own name for the public origin, and it is not optional: the
+      # sitemap must carry absolute URLs and a canonical tag is meaningless as
+      # a relative one. Same value the storefront gets as PUBLIC_ORIGIN -- two
+      # variable names, one address, and they must not drift.
+      SITE_BASE_URL: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN in .env.production}
+      DEFAULT_CURRENCY: EGP
+      DEFAULT_LOCALE: en
+      HOUSE_BRAND: ${HOUSE_BRAND:-Pixi}
+      ORDER_NUMBER_PREFIX: ${ORDER_NUMBER_PREFIX:-ORD}
+      IDEMPOTENCY_TTL_HOURS: "24"
+      GUEST_CART_TTL_DAYS: "30"
+      CUSTOMER_CART_TTL_DAYS: "90"
+      CART_ABANDONED_AFTER_HOURS: "24"
+      MEDIA_ROOT: /var/lib/marvel/media
+    volumes:
+      # The only application state outside Postgres. A database dump does not
+      # contain a single product photograph; back this up separately or a
+      # rebuild loses all of them. deploy/backup.sh covers both.
+      - marvel_media:/var/lib/marvel/media
+    # Migrations run here and only here. The worker deliberately does not, so
+    # two processes never race to migrate one database.
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn main:app --host 0.0.0.0 --port 8000
+             --proxy-headers --forwarded-allow-ips '*'"
+
+  worker:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        # Waits for the API because the API owns the migrations, not because
+        # the worker talks to it. The queue is a Postgres table.
+        condition: service_healthy
+    environment:
+      DB_URL: postgresql+psycopg2://${POSTGRES_USER:-marvel}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-marvel}
+      DEFAULT_CURRENCY: EGP
+      DEFAULT_LOCALE: en
+      CART_ABANDONED_AFTER_HOURS: "24"
+      GUEST_CART_TTL_DAYS: "30"
+      CUSTOMER_CART_TTL_DAYS: "90"
+      JOB_LEASE_SECONDS: "300"
+      JOB_POLL_SECONDS: "2"
+      JOB_BATCH_SIZE: "5"
+      JOB_MAX_ATTEMPTS: "5"
+    command: ["python", "-m", "workers.runner"]
+    # Same image as the API, so it inherits the API's HEALTHCHECK -- which curls
+    # :8000/health, a port this process does not listen on. Left as-is the
+    # worker is permanently "unhealthy" while working perfectly, which trains
+    # everyone to ignore the column that is supposed to mean something.
+    # It proves liveness by reaching the database it polls.
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os,psycopg2;psycopg2.connect(os.environ['DB_URL'].replace('postgresql+psycopg2','postgresql')).close()\""]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  storefront:
+    build:
+      context: ./storefront
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      # Server-side rendering calls the API from inside the network, where
+      # there is no browser origin to be relative to. Getting this wrong is the
+      # classic SSR failure: the page renders and every hydrated interaction
+      # 404s, or the reverse.
+      API_ORIGIN: http://api:8000
+      # What the page prints in canonical tags, hreflang and the sitemap. It is
+      # the public address, so it is the one thing here that must NOT be an
+      # internal service name.
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN in .env.production}
+
+  admin:
+    build:
+      context: ./admin
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - storefront
+      - admin
+      - api
+    environment:
+      # Empty means ":80" -- plain HTTP on the server's IP, which is correct
+      # before DNS exists. Set it to a domain and certificates are obtained on
+      # the next start with nothing else to change.
+      #
+      # The `:-:80` default is here rather than in the Caddyfile because Caddy's
+      # own inline default only fires when a variable is unset, and compose sets
+      # this one either way.
+      SITE_DOMAIN: ${SITE_DOMAIN:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+      # QUIC. Harmless if the host firewall drops it.
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Issued certificates. Losing this volume means re-requesting on every
+      # restart, and Let's Encrypt rate-limits that hard enough to take the site
+      # off TLS for a week.
+      - marvel_caddy_data:/data
+      - marvel_caddy_config:/config
+
+volumes:
+  marvel_pgdata:
+  marvel_redis:
+  marvel_media:
+  marvel_caddy_data:
+  marvel_caddy_config:

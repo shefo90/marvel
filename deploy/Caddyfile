@@ -1,0 +1,94 @@
+# The single origin everything sits behind.
+#
+# The apps already assume this. The admin calls `/api/...` relative, the
+# storefront's dev setup proxies `/api` and `/media` to the API, and the shopper
+# session cookie is scoped to `/api` on the same host. One origin is not a
+# deployment convenience here -- it is the topology the code was written for,
+# and splitting it would need CORS middleware the API deliberately does not have.
+#
+# {$SITE_DOMAIN} comes from the environment. Set it to a real domain and Caddy
+# obtains and renews a Let's Encrypt certificate on its own. Leave it empty and
+# compose passes `:80`, which serves plain HTTP against the server's IP address
+# -- what you want before DNS exists.
+#
+# The default lives in docker-compose.prod.yml rather than here as
+# `{$SITE_DOMAIN::80}`. Caddy's inline default only applies when the variable is
+# *unset*, and compose always sets it -- to an empty string when you have no
+# domain. That collapsed this line to a bare `{`, which Caddy then read as the
+# global options block and rejected `encode` as a global option. The error names
+# a line fifteen lines below the actual cause.
+
+{$SITE_DOMAIN} {
+	encode gzip zstd
+
+	# Order matters: Caddy matches the most specific route, but stating the API
+	# and media paths before the catch-all keeps the intent readable.
+
+	# A cheap liveness URL for an uptime monitor. The API serves /health at its
+	# root, so this rewrites rather than proxying straight through. Worth having
+	# as its own route: the alternative is pointing a monitor at /en, which
+	# renders the entire home page every sixty seconds forever.
+	handle /api/health {
+		rewrite * /health
+		reverse_proxy api:8000
+	}
+
+	# The API. proxy headers are passed so the app can tell it is behind TLS --
+	# uvicorn runs with --proxy-headers, and without X-Forwarded-Proto the
+	# shopper session cookie would be issued without Secure. COOKIE_SECURE=1 in
+	# the environment is the belt to this braces.
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	# Uploaded product photographs, served by the API's static mount. Long-lived
+	# because the keys are content hashes: the same URL never points at
+	# different bytes, so there is nothing to invalidate.
+	handle /media/* {
+		header Cache-Control "public, max-age=31536000, immutable"
+		reverse_proxy api:8000
+	}
+
+	# Crawler files. These are served by the API at the ROOT, not under /api --
+	# they have to be, because a crawler looks for /robots.txt and /sitemap.xml
+	# at the origin and nowhere else. Without these two lines they fall through
+	# to the storefront, which has no such routes, and the shop is invisible to
+	# search engines while looking perfectly fine to a person.
+	handle /robots.txt {
+		reverse_proxy api:8000
+	}
+
+	handle /sitemap*.xml {
+		reverse_proxy api:8000
+	}
+
+	# The back-office. Its own container serves the built bundle; the path
+	# prefix is kept because vite built every asset URL with base '/admin/'.
+	handle /admin* {
+		reverse_proxy admin:80
+	}
+
+	# Everything else is the shop, server-rendered.
+	handle {
+		reverse_proxy storefront:3000
+	}
+
+	# Sent on every response. None of these are optional for a site that takes
+	# an address and a phone number.
+	header {
+		# Clickjacking: the admin login and the checkout must not be frameable.
+		X-Frame-Options "SAMEORIGIN"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Told to browsers only once TLS is real; harmless over plain HTTP
+		# because browsers ignore it there, and already correct for the day the
+		# domain is switched on.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

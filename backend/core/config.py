@@ -58,6 +58,24 @@ MEDIA_URL_PREFIX = os.getenv("MEDIA_URL_PREFIX", "/media")
 SITE_BASE_URL = os.getenv("SITE_BASE_URL", "http://localhost:3000").rstrip("/")
 
 SECRET_KEY = os.getenv("SECRET_KEY")
+
+# The value shipped in docker-compose.yml for local development. It is in a
+# tracked file, so it is public, so anything signed with it can be forged --
+# including a staff token with admin access level. Refusing to boot on it is
+# the only check that cannot be forgotten during a deploy.
+_DEV_SECRET = "dev-only-secret-change-before-any-deployment"
+
+if os.getenv("COOKIE_SECURE", "").lower() in ("1", "true", "yes"):
+    # COOKIE_SECURE is only ever set where the site is served over TLS, which
+    # makes it the most reliable signal available here that this is not a
+    # developer's laptop.
+    if not SECRET_KEY or SECRET_KEY == _DEV_SECRET:
+        raise RuntimeError(
+            "SECRET_KEY is unset or still the development value while "
+            "COOKIE_SECURE is on. Generate one with "
+            "`python -c \"import secrets; print(secrets.token_urlsafe(48))\"` "
+            "and put it in .env.production."
+        )
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "14"))

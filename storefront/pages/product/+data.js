@@ -21,8 +21,16 @@ export async function data(pageContext) {
   }
 
   const origin = publicOrigin();
-  const canonical =
-    product.canonical_url || `${origin}/${locale}/products/${product.slug}`;
+  // The API returns canonical_url as a PATH ("/en/products/x"), not an absolute
+  // URL, and taking it verbatim shipped a relative canonical -- which search
+  // engines ignore, making the tag decorative. The alternates a few lines down
+  // were already absolutised the same way; the canonical was missed. Found by
+  // reading the rendered HTML of a real product page, not by any test:
+  // everything about a relative canonical looks correct in the markup.
+  const canonicalPath = product.canonical_url || `/${locale}/products/${product.slug}`;
+  const canonical = canonicalPath.startsWith('http')
+    ? canonicalPath
+    : `${origin}${canonicalPath}`;
   const image = product.images?.find((i) => i.is_primary) ?? product.images?.[0];
 
   // The API returns the cluster it knows to be published. Relative paths are
