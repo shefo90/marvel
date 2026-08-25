@@ -109,3 +109,339 @@ def test_admin_listing_shows_drafts_that_the_public_listing_hides(client, staff_
     # Every row the admin sees under status=draft must be a draft; the public
     # endpoint has no such view at all.
     assert all(item["status"] == "draft" for item in admin.json()["items"])
+
+
+def _any_level2_category_id() -> int:
+    """Seed data provides level-2 categories; this test needs one that exists."""
+    from sqlalchemy import select
+
+    from core.db import SessionLocal
+    from models.categories import Category
+
+    db = SessionLocal()
+    try:
+        return db.execute(
+            select(Category.id).where(Category.level == 2).order_by(Category.id).limit(1)
+        ).scalar_one()
+    finally:
+        db.close()
+
+
+@pytest.fixture
+def e2e_cleanup():
+    """Remove the product this test commits, so the suite is repeatable."""
+    slugs: list[str] = []
+    yield slugs
+
+    from sqlalchemy import select
+
+    from models.product_translations import ProductTranslation
+    from models.product_variants import ProductVariant
+    from models.products import Product
+
+    db = SessionLocal()
+    try:
+        for slug in slugs:
+            product = db.execute(
+                select(Product).where(Product.slug == slug)
+            ).scalar_one_or_none()
+            if product is None:
+                continue
+            # default_variant_id references a variant, so clear it before the
+            # variants are removed or the FK blocks the delete. The brief's
+            # fixture nulls default_variant_id alone, but this test publishes
+            # the product (status becomes 'active'), and
+            # ck_products_active_has_default_variant forbids status='active'
+            # with a NULL default_variant_id -- so status must drop out of
+            # 'active' in the same update or the clear itself raises
+            # IntegrityError.
+            product.status = "draft"
+            product.default_variant_id = None
+            db.flush()
+            for model in (ProductTranslation, ProductVariant):
+                for row in db.execute(
+                    select(model).where(model.product_id == product.id)
+                ).scalars():
+                    db.delete(row)
+            db.delete(product)
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_operator_can_take_a_product_from_nothing_to_published(client, staff_token, e2e_cleanup):
+    """The whole point of this slice: a shop operator, not a developer."""
+    token = staff_token("catalog")
+    auth = {"Authorization": f"Bearer {token}"}
+
+    categories = client.get("/api/admin/products", headers=auth)
+    assert categories.status_code == 200
+
+    created = client.post("/api/admin/products", headers=auth, json={
+        "title": "E2E Sandal", "slug": "e2e-sandal", "brand": "Pixi",
+        "category_id": _any_level2_category_id(),
+    })
+    assert created.status_code == 201, created.text
+    e2e_cleanup.append("e2e-sandal")
+    product_id = created.json()["id"]
+
+    variants = client.post(
+        f"/api/admin/products/{product_id}/variants", headers=auth,
+        json={"sizes": ["38", "39"], "colors": ["black"], "price": "500.00",
+              "stock_quantity": 5},
+    )
+    assert variants.status_code == 201
+    assert len(variants.json()) == 2
+
+    not_ready = client.post(
+        f"/api/admin/products/{product_id}/publish?locale=ar", headers=auth
+    )
+    assert not_ready.status_code == 422
+    assert any(b["code"] == "no_translation" for b in not_ready.json()["detail"])
+
+    client.put(
+        f"/api/admin/products/{product_id}/translations/ar", headers=auth,
+        json={"title": "صندل", "description": "وصف", "meta_description": "قصير"},
+    )
+
+    published = client.post(
+        f"/api/admin/products/{product_id}/publish?locale=ar", headers=auth
+    )
+    assert published.status_code == 200
+    assert published.json()["is_published"] is True
+
+
+# --- Tasks 8-10 review fixes: HTTP-level coverage (I3) ----------------------
+#
+# Every Task 8-10 test up to here calls the repository functions directly, so
+# the response models, the route gating, and the Pydantic request boundary
+# were all unverified -- which is exactly how I2 (an sku field missing from
+# admin_variant_update, silently swallowing an attempted SKU change) slipped
+# through. These go over real HTTP with a real staff login instead.
+
+
+def _create_product_with_variant(client, auth: dict, slug: str) -> tuple[int, int]:
+    created = client.post("/api/admin/products", headers=auth, json={
+        "title": "HTTP Sandal", "slug": slug, "brand": "Pixi",
+        "category_id": _any_level2_category_id(),
+    })
+    assert created.status_code == 201, created.text
+    product_id = created.json()["id"]
+
+    variants = client.post(
+        f"/api/admin/products/{product_id}/variants", headers=auth,
+        json={"sizes": ["38"], "colors": ["black"], "price": "500.00"},
+    )
+    assert variants.status_code == 201, variants.text
+    return product_id, variants.json()[0]["id"]
+
+
+def test_admin_get_product_returns_translations_and_variants(client, staff_token, e2e_cleanup):
+    token = staff_token("catalog")
+    auth = {"Authorization": f"Bearer {token}"}
+    slug = "http-load-1"
+    product_id, _ = _create_product_with_variant(client, auth, slug)
+    e2e_cleanup.append(slug)
+
+    client.put(
+        f"/api/admin/products/{product_id}/translations/ar", headers=auth,
+        json={"title": "صندل"},
+    )
+
+    r = client.get(f"/api/admin/products/{product_id}", headers=auth)
+
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["id"] == product_id
+    assert len(body["variants"]) == 1
+    assert {t["locale"] for t in body["translations"]} == {"ar"}
+
+
+def test_admin_patch_product_edits_a_base_field(client, staff_token, e2e_cleanup):
+    token = staff_token("catalog")
+    auth = {"Authorization": f"Bearer {token}"}
+    slug = "http-edit-1"
+    product_id, _ = _create_product_with_variant(client, auth, slug)
+    e2e_cleanup.append(slug)
+
+    r = client.patch(
+        f"/api/admin/products/{product_id}", headers=auth, json={"title": "New Title"},
+    )
+
+    assert r.status_code == 200, r.text
+    assert r.json()["title"] == "New Title"
+
+
+def test_admin_archive_product(client, staff_token, e2e_cleanup):
+    token = staff_token("catalog")
+    auth = {"Authorization": f"Bearer {token}"}
+    slug = "http-archive-1"
+    product_id, _ = _create_product_with_variant(client, auth, slug)
+    e2e_cleanup.append(slug)
+
+    r = client.post(f"/api/admin/products/{product_id}/archive", headers=auth)
+
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "archived"
+
+
+def test_admin_patch_variant_changes_price_as_catalog_role(client, staff_token, e2e_cleanup):
+    token = staff_token("catalog")
+    auth = {"Authorization": f"Bearer {token}"}
+    slug = "http-variant-1"
+    _, variant_id = _create_product_with_variant(client, auth, slug)
+    e2e_cleanup.append(slug)
+
+    r = client.patch(
+        f"/api/admin/variants/{variant_id}", headers=auth, json={"price": "425.00"},
+    )
+
+    assert r.status_code == 200, r.text
+    from decimal import Decimal
+    assert Decimal(str(r.json()["price"])) == Decimal("425.00")
+
+
+def test_admin_patch_variant_cost_requires_admin(client, staff_token, e2e_cleanup):
+    catalog_token = staff_token("catalog")
+    catalog_auth = {"Authorization": f"Bearer {catalog_token}"}
+    slug = "http-variant-2"
+    _, variant_id = _create_product_with_variant(client, catalog_auth, slug)
+    e2e_cleanup.append(slug)
+
+    forbidden = client.patch(
+        f"/api/admin/variants/{variant_id}", headers=catalog_auth,
+        json={"cost": "200.00"},
+    )
+    assert forbidden.status_code == 403
+
+    admin_token = staff_token("admin")
+    admin_auth = {"Authorization": f"Bearer {admin_token}"}
+    allowed = client.patch(
+        f"/api/admin/variants/{variant_id}", headers=admin_auth, json={"cost": "200.00"},
+    )
+    assert allowed.status_code == 200, allowed.text
+
+
+def test_admin_patch_variant_with_changed_sku_is_400(client, staff_token, e2e_cleanup):
+    """I2: admin_variant_update previously had no sku field, so Pydantic
+    silently dropped a "sku" key from the request body before the
+    repository's refusal could ever fire -- a caller changing sku got 200 OK
+    and a no-op. This is the HTTP-level proof the field now survives to the
+    repository and the 400 actually fires."""
+    token = staff_token("catalog")
+    auth = {"Authorization": f"Bearer {token}"}
+    slug = "http-variant-3"
+    _, variant_id = _create_product_with_variant(client, auth, slug)
+    e2e_cleanup.append(slug)
+
+    r = client.patch(
+        f"/api/admin/variants/{variant_id}", headers=auth,
+        json={"sku": "REWRITTEN-HTTP-1"},
+    )
+
+    assert r.status_code == 400, r.text
+    assert "immutable" in r.json()["detail"].lower()
+
+
+# --- Whole-branch review fix B2: validation gaps that reached the DB --------
+#
+# condition/gender/age_group/status are SAEnum(native_enum=False) columns, so a
+# value outside the enum raises LookupError at bind time -- a 500 for what is
+# plainly a bad request. These prove the request is refused at the boundary,
+# before the repository or the database ever sees it.
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [("condition", "antique"), ("gender", "robot"), ("age_group", "ancient")],
+)
+def test_admin_create_product_rejects_a_value_outside_the_enum(
+    client, staff_token, e2e_cleanup, field, value
+):
+    token = staff_token("catalog")
+    # Hyphens, not the field name verbatim: "age_group" is not a legal slug
+    # (ck_products_slug_format), and a 400 for a malformed slug would mask
+    # whether the enum was refused at all.
+    slug = "b2-bad-" + field.replace("_", "-")
+    # Registered before the call, not after: if this validation regresses the
+    # row *is* written -- there is no CHECK behind the column -- and an
+    # unregistered row is residue the next run trips over.
+    e2e_cleanup.append(slug)
+    body = {
+        "title": "Bad Enum", "slug": slug, "brand": "Pixi",
+        "category_id": _any_level2_category_id(), field: value,
+    }
+
+    r = client.post(
+        "/api/admin/products",
+        headers={"Authorization": f"Bearer {token}"},
+        json=body,
+    )
+
+    assert r.status_code == 422, r.text
+
+
+def test_admin_create_product_rejects_an_overlong_item_group_id(
+    client, staff_token, e2e_cleanup
+):
+    """products.item_group_id is String(64), and the generated variant sku is
+    String(64) too -- a long item_group_id plus a long colour overflows it."""
+    token = staff_token("catalog")
+    e2e_cleanup.append("b2-long-group")
+
+    r = client.post(
+        "/api/admin/products",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "title": "Long Group", "slug": "b2-long-group", "brand": "Pixi",
+            "category_id": _any_level2_category_id(), "item_group_id": "G" * 65,
+        },
+    )
+
+    assert r.status_code == 422, r.text
+
+
+def test_admin_listing_rejects_a_status_outside_the_lifecycle(client, staff_token):
+    token = staff_token("catalog")
+
+    r = client.get(
+        "/api/admin/products?status=deleted",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert r.status_code == 422, r.text
+
+
+def test_admin_generate_variants_rejects_a_negative_price(client, staff_token):
+    """Refused by the request schema, so it never reaches the repository --
+    hence a product id that does not exist is still a 422, not a 404."""
+    token = staff_token("catalog")
+
+    r = client.post(
+        "/api/admin/products/999999999/variants",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"sizes": ["38"], "colors": ["black"], "price": "-1.00"},
+    )
+
+    assert r.status_code == 422, r.text
+
+
+def test_admin_patch_product_rejects_a_value_outside_the_enum(
+    client, staff_token, e2e_cleanup
+):
+    """The edit path writes these columns as blindly as the create path does,
+    so it needs the same boundary -- an unloadable product is an unloadable
+    product however it got that way."""
+    token = staff_token("catalog")
+    auth = {"Authorization": f"Bearer {token}"}
+    slug = "b2-patch-enum"
+    e2e_cleanup.append(slug)
+    product_id, _ = _create_product_with_variant(client, auth, slug)
+
+    r = client.patch(
+        f"/api/admin/products/{product_id}", headers=auth,
+        json={"condition": "antique"},
+    )
+
+    assert r.status_code == 422, r.text
+    assert client.get(f"/api/admin/products/{product_id}", headers=auth).status_code == 200

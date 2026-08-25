@@ -10,13 +10,38 @@ No SQLAlchemy in this layer.
 """
 
 from fastapi import APIRouter, Depends, Query
+from fastapi import status as http_status
 from sqlalchemy.orm import Session
 
 from core.db import get_db
+from core.enums import ProductStatus
 from models.users import User
-from repositories.admin_catalog import list_products_for_admin
+from repositories.admin_catalog import (
+    archive_product,
+    create_product,
+    generate_variants,
+    get_product_for_admin,
+    list_products_for_admin,
+    publish_product,
+    publish_readiness,
+    update_product,
+    update_variant,
+    upsert_translation,
+)
 from routes.admin_deps import staff_at_least
-from schema.admin_catalog import admin_product_list_response
+from schema.admin_catalog import (
+    admin_blocker,
+    admin_product_create,
+    admin_product_detail,
+    admin_product_full,
+    admin_product_list_response,
+    admin_product_update,
+    admin_translation_detail,
+    admin_translation_upsert,
+    admin_variant_matrix,
+    admin_variant_row,
+    admin_variant_update,
+)
 from services.role_access_level import LEVEL_CATALOG
 
 router = APIRouter(prefix="/api/admin", tags=["admin-catalog"])
@@ -26,7 +51,12 @@ router = APIRouter(prefix="/api/admin", tags=["admin-catalog"])
 def admin_list_products(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
-    status: str | None = Query(None, description="Filter to one lifecycle state"),
+    # Typed, not free text: an unknown status silently matched nothing and
+    # returned an empty page, which reads as "no products" rather than "that
+    # is not a status".
+    status: ProductStatus | None = Query(
+        None, description="Filter to one lifecycle state"
+    ),
     search: str | None = Query(None, description="Match base title or slug"),
     actor: User = Depends(staff_at_least(LEVEL_CATALOG)),
     db: Session = Depends(get_db),
@@ -40,3 +70,143 @@ def admin_list_products(
     return list_products_for_admin(
         db, page=page, page_size=page_size, status=status, search=search
     )
+
+
+@router.post(
+    "/products",
+    response_model=admin_product_detail,
+    status_code=http_status.HTTP_201_CREATED,
+)
+def admin_create_product(
+    payload: admin_product_create,
+    actor: User = Depends(staff_at_least(LEVEL_CATALOG)),
+    db: Session = Depends(get_db),
+):
+    """Create a product in draft. Publishing is a separate, validated step."""
+    product = create_product(db, actor, payload.model_dump(exclude_none=False))
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+@router.put(
+    "/products/{product_id}/translations/{locale}",
+    response_model=admin_translation_detail,
+)
+def admin_upsert_translation(
+    product_id: int,
+    locale: str,
+    payload: admin_translation_upsert,
+    actor: User = Depends(staff_at_least(LEVEL_CATALOG)),
+    db: Session = Depends(get_db),
+):
+    """Create or replace one language's content for a product."""
+    tr = upsert_translation(
+        db, actor, product_id, locale,
+        payload.model_dump(exclude_unset=True),
+    )
+    db.commit()
+    db.refresh(tr)
+    return tr
+
+
+@router.post(
+    "/products/{product_id}/variants",
+    response_model=list[admin_variant_row],
+    status_code=http_status.HTTP_201_CREATED,
+)
+def admin_generate_variants(
+    product_id: int,
+    payload: admin_variant_matrix,
+    actor: User = Depends(staff_at_least(LEVEL_CATALOG)),
+    db: Session = Depends(get_db),
+):
+    """Generate the size x colour matrix. Existing combinations are skipped."""
+    created = generate_variants(
+        db, actor, product_id, payload.sizes, payload.colors,
+        payload.model_dump(exclude={"sizes", "colors"}, exclude_none=True),
+    )
+    db.commit()
+    for v in created:
+        db.refresh(v)
+    return created
+
+
+@router.get("/products/{product_id}", response_model=admin_product_full)
+def admin_get_product(
+    product_id: int,
+    actor: User = Depends(staff_at_least(LEVEL_CATALOG)),
+    db: Session = Depends(get_db),
+):
+    """Load a product for editing, drafts and unpublished languages included."""
+    return get_product_for_admin(db, product_id)
+
+
+@router.patch("/products/{product_id}", response_model=admin_product_detail)
+def admin_update_product(
+    product_id: int,
+    payload: admin_product_update,
+    actor: User = Depends(staff_at_least(LEVEL_CATALOG)),
+    db: Session = Depends(get_db),
+):
+    """Edit base fields. Only fields actually sent are changed."""
+    product = update_product(
+        db, actor, product_id, payload.model_dump(exclude_unset=True)
+    )
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+@router.post("/products/{product_id}/archive", response_model=admin_product_detail)
+def admin_archive_product(
+    product_id: int,
+    actor: User = Depends(staff_at_least(LEVEL_CATALOG)),
+    db: Session = Depends(get_db),
+):
+    """Retire a product. Never deletes — sold products cannot be deleted at all."""
+    product = archive_product(db, actor, product_id)
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+@router.patch("/variants/{variant_id}", response_model=admin_variant_row)
+def admin_update_variant(
+    variant_id: int,
+    payload: admin_variant_update,
+    actor: User = Depends(staff_at_least(LEVEL_CATALOG)),
+    db: Session = Depends(get_db),
+):
+    """Edit one variant. Setting `cost` additionally requires an admin."""
+    variant = update_variant(
+        db, actor, variant_id, payload.model_dump(exclude_unset=True)
+    )
+    db.commit()
+    db.refresh(variant)
+    return variant
+
+
+@router.get("/products/{product_id}/readiness", response_model=list[admin_blocker])
+def admin_publish_readiness(
+    product_id: int,
+    locale: str = Query(..., min_length=2, max_length=5),
+    actor: User = Depends(staff_at_least(LEVEL_CATALOG)),
+    db: Session = Depends(get_db),
+):
+    """What still blocks this language from publishing. Empty list means ready."""
+    return publish_readiness(db, product_id, locale)
+
+
+@router.post("/products/{product_id}/publish", response_model=admin_translation_detail)
+def admin_publish(
+    product_id: int,
+    locale: str = Query(..., min_length=2, max_length=5),
+    actor: User = Depends(staff_at_least(LEVEL_CATALOG)),
+    db: Session = Depends(get_db),
+):
+    """Publish one language. Returns 422 with a blocker list if not ready."""
+    tr = publish_product(db, actor, product_id, locale)
+    db.commit()
+    db.refresh(tr)
+    return tr
