@@ -1,0 +1,15 @@
+@use 'variables' as v;
+
+// A column of stacked blocks with consistent rhythm. Used by every form
+// section, so the editor tabs do not each pick their own gap.
+@mixin stack($gap: v.$space-md) {
+  display: flex;
+  flex-direction: column;
+  gap: $gap;
+}
+
+@mixin card-surface {
+  background: #fff;
+  border-radius: 8px;
+  padding: v.$space-lg;
+}

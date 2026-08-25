@@ -1,0 +1,10 @@
+@use '../../../assets/styles/variables' as v;
+
+.price {
+  display: inline-flex;
+  align-items: baseline;
+  gap: v.$space-sm;
+}
+
+.now { color: v.$sale; font-weight: 600; }
+.was { color: v.$ink-soft; font-size: 0.9em; }

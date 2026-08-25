@@ -1,0 +1,158 @@
+@use '../../../assets/styles/variables' as v;
+
+$swatches: (
+  'black': #211f1d, 'white': #f4f2ee, 'beige': #d6c6b0, 'brown': #5e4430,
+  'tan': #b0855c, 'navy': #26304c, 'grey': #807e7a, 'red': #962e2c,
+  'pink': #d6a0aa, 'green': #4a604a, 'gold': #ba9a54, 'silver': #babac0,
+);
+
+.panel {
+  border: 1px solid v.$line;
+  border-radius: v.$radius;
+  background: v.$surface;
+  padding: v.$space-md;
+  align-self: start;
+  position: sticky;
+  top: v.$space-md;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: v.$space-sm;
+}
+
+.heading {
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0;
+}
+
+.clear { font-size: 12px; }
+
+.count {
+  font-size: 12px;
+  color: v.$ink-soft;
+  margin: v.$space-xs 0 v.$space-md;
+}
+
+.group {
+  border-top: 1px solid v.$line;
+  padding-top: v.$space-md;
+  margin-top: v.$space-md;
+
+  &:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
+}
+
+.groupHeading {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: v.$ink-soft;
+  margin: 0 0 v.$space-sm;
+}
+
+.sizeList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.size,
+.sizeOn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 44px;
+  justify-content: center;
+  padding: 6px 8px;
+  border: 1px solid v.$line;
+  border-radius: 6px;
+  font-size: 13px;
+  text-decoration: none;
+  color: v.$ink;
+
+  &:hover { border-color: v.$ink-soft; }
+}
+
+.sizeOn {
+  border-color: v.$ink;
+  background: v.$ink;
+  color: #fff;
+}
+
+.colourList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.colour,
+.colourOn {
+  display: flex;
+  align-items: center;
+  gap: v.$space-sm;
+  padding: 6px v.$space-sm;
+  border-radius: 6px;
+  font-size: 13px;
+  text-decoration: none;
+  color: v.$ink;
+
+  &:hover { background: v.$ground; }
+}
+
+.colourOn {
+  background: v.$ground;
+  font-weight: 600;
+}
+
+.dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  flex-shrink: 0;
+  background: #ccc;
+
+  @each $code, $value in $swatches {
+    &[data-colour='#{$code}'] { background: $value; }
+  }
+}
+
+.facetCount {
+  // Pushed to the end of the row, and `auto` on the inline-start margin is what
+  // makes that work in both directions without a second rule for RTL.
+  margin-inline-start: auto;
+  font-size: 11px;
+  color: v.$ink-soft;
+}
+
+.sizeOn .facetCount { color: rgba(255, 255, 255, 0.75); }
+
+.stock,
+.stockOn {
+  display: inline-block;
+  padding: 8px v.$space-md;
+  border: 1px solid v.$line;
+  border-radius: 999px;
+  font-size: 13px;
+  text-decoration: none;
+  color: v.$ink;
+}
+
+.stockOn {
+  border-color: v.$ink;
+  background: v.$ink;
+  color: #fff;
+}
+
+@media (max-width: 900px) {
+  .panel { position: static; }
+}

@@ -1,0 +1,82 @@
+@use '../../assets/styles/variables' as v;
+@use '../../assets/styles/mixins' as m;
+
+.panel {
+  @include m.card-surface;
+}
+
+.form {
+  max-width: 760px;
+}
+
+.alert {
+  margin-bottom: v.$space-md;
+}
+
+.row {
+  width: 100%;
+  align-items: flex-start;
+}
+
+.field {
+  min-width: 180px;
+}
+
+.localeBar {
+  margin-bottom: v.$space-md;
+}
+
+.matrix {
+  margin-bottom: v.$space-lg;
+}
+
+.wideField {
+  min-width: 260px;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}
+
+.uploadForm {
+  width: 100%;
+}
+
+.fileField {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-xs;
+  max-width: 480px;
+
+  > span {
+    color: rgba(0, 0, 0, 0.88);
+  }
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: v.$space-lg;
+}
+
+.tile {
+  margin: 0;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  padding: v.$space-md;
+}
+
+.thumb {
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+  display: block;
+  margin-bottom: v.$space-sm;
+  background: #fafafa;
+}
+
+.altText {
+  margin: v.$space-xs 0 v.$space-sm !important;
+  font-size: 13px;
+}

@@ -74,6 +74,7 @@ from models.customers import Customer
 from models.product_translations import ProductTranslation
 from models.product_variants import ProductVariant
 from models.products import Product
+from repositories.pricing import price_basket
 
 ZERO = Decimal("0.00")
 
@@ -192,13 +193,33 @@ def _cart_by_token(db: Session, token: str, *, for_update: bool) -> Cart | None:
 def _cart_by_customer(db: Session, customer_id: int, *, for_update: bool) -> Cart | None:
     stmt = (
         select(Cart)
-        .where(Cart.customer_id == customer_id, Cart.status == CartStatus.active.value)
+        .where(
+            Cart.customer_id == customer_id,
+            # Abandoned too: the sweep flags a cart idle for a day, and a
+            # signed-in shopper coming back must find the basket they left, not
+            # an empty one. Ordering means a genuinely active cart still wins.
+            Cart.status.in_([CartStatus.active.value, CartStatus.abandoned.value]),
+        )
         .order_by(Cart.last_activity_at.desc())
         .limit(1)
     )
     if for_update:
         stmt = stmt.with_for_update()
     return db.execute(stmt).scalar_one_or_none()
+
+
+def _reactivate_if_abandoned(cart: Cart | None) -> None:
+    """Undo the abandonment sweep for a shopper who came back.
+
+    ``abandoned`` is an analytics marker, not a demolition. ``tasks.carts``
+    flags any cart idle past CART_ABANDONED_AFTER_HOURS so abandonment can be
+    counted and, later, recovered by email -- but the basket itself has to
+    survive, or every shopper who takes a day to decide loses it. ``expires_at``,
+    refreshed on every touch, is what actually ends a cart's life.
+    """
+    if cart is not None and _enum_value(cart.status) == CartStatus.abandoned.value:
+        cart.status = CartStatus.active.value
+        cart.abandoned_at = None
 
 
 def _create_cart(db: Session, *, locale: str, customer_id: int | None) -> Cart:
@@ -241,9 +262,10 @@ def _resolve(
     cart = None
     if cart_token:
         cart = _cart_by_token(db, cart_token, for_update=True)
+        _reactivate_if_abandoned(cart)
         if cart is not None and _enum_value(cart.status) != CartStatus.active.value:
-            # Converted / expired / abandoned carts are not reusable. A new one
-            # is issued rather than silently resurrecting an ordered basket.
+            # Converted and expired carts are not reusable. A new one is issued
+            # rather than silently resurrecting an ordered basket.
             cart = None
         if (
             cart is not None
@@ -256,6 +278,7 @@ def _resolve(
 
     if customer_id is not None:
         owned = _cart_by_customer(db, customer_id, for_update=True)
+        _reactivate_if_abandoned(owned)
         if cart is None:
             cart = owned
         elif owned is not None and owned.id != cart.id:
@@ -378,32 +401,82 @@ def _assert_purchasable(variant: ProductVariant, quantity: int) -> None:
 # --- totals ---------------------------------------------------------------
 
 
+class _SnapshotVariant:
+    """A cart line, shaped like a variant for ``price_basket``.
+
+    The cart prices from its own snapshots, not from the live catalog: a price
+    edit mid-session must surface as ``price_changed`` on the line rather than
+    silently repricing the basket. Promotions are still evaluated live, because
+    they are time-windowed by nature, and checkout refuses to convert a cart
+    whose snapshot has drifted from the catalog — so whenever an order can be
+    placed at all, both sides are pricing the same numbers.
+    """
+
+    __slots__ = ("id", "product_id", "price", "sale_price")
+
+    def __init__(self, item: CartItem, product_id: int):
+        self.id = item.variant_id
+        self.product_id = product_id
+        self.price = item.unit_price_snapshot
+        self.sale_price = item.unit_sale_price_snapshot
+
+
 def _recalculate(db: Session, cart: Cart) -> None:
-    """Recompute the cart header from its lines, in SQL.
+    """Recompute the cart header from its lines, through the shared pricing.
 
-    Deliberately an aggregate over ``cart_items`` rather than an increment: an
-    incremented total can disagree with the lines it summarizes, and section 15
-    tests exactly that after rapid repeated clicks.
+    Deliberately a full recomputation rather than an increment: an incremented
+    total can disagree with the lines it summarizes, and section 15 tests
+    exactly that after rapid repeated clicks.
 
-    ``subtotal`` is the list-price sum and ``discount_total`` the saving, so
-    ``total = subtotal - discount_total`` mirrors the ``orders`` totals identity
-    (``total = subtotal - discount + tax + shipping``, with tax 0 because prices
-    are VAT-inclusive).
+    ``subtotal`` is the list-price sum and ``discount_total`` the whole saving —
+    markdown plus promotion — so ``total = subtotal - discount_total`` mirrors
+    the ``orders`` totals identity (``total = subtotal - discount + tax +
+    shipping``, with tax 0 because prices are VAT-inclusive).
+
+    ``repositories/pricing.py`` is called here and at checkout, and nowhere
+    else. Two implementations of one rule is the defect that put one shopper in
+    two ``customers`` rows; a second copy of *this* rule shows one price and
+    charges another.
     """
     db.flush()
-    effective = func.coalesce(
-        CartItem.unit_sale_price_snapshot, CartItem.unit_price_snapshot
+    items = list(
+        db.execute(select(CartItem).where(CartItem.cart_id == cart.id)).scalars()
     )
-    count, subtotal, discount = db.execute(
-        select(
-            func.coalesce(func.sum(CartItem.quantity), 0),
-            func.coalesce(func.sum(CartItem.unit_price_snapshot * CartItem.quantity), 0),
-            func.coalesce(
-                func.sum((CartItem.unit_price_snapshot - effective) * CartItem.quantity),
-                0,
-            ),
-        ).where(CartItem.cart_id == cart.id)
-    ).one()
+
+    product_ids = dict(
+        db.execute(
+            select(ProductVariant.id, ProductVariant.product_id).where(
+                ProductVariant.id.in_([item.variant_id for item in items])
+            )
+        ).all()
+    ) if items else {}
+
+    priced = price_basket(
+        db,
+        [
+            (_SnapshotVariant(item, product_ids.get(item.variant_id, 0)), item.quantity)
+            for item in items
+        ],
+    )
+    by_variant = {line.variant_id: line for line in priced}
+
+    subtotal = Decimal("0.00")
+    discount = Decimal("0.00")
+    count = 0
+    for item in items:
+        line = by_variant.get(item.variant_id)
+        count += item.quantity
+        if line is None:
+            continue
+        item.promotion_id = line.promotion_id
+        item.discount_amount = line.discount_amount
+        item.discount_source = line.discount_source
+        subtotal += line.unit_list_price * item.quantity
+        # The markdown and the promotion are both savings to the shopper; only
+        # the promotion half is campaign cost, which is what discount_source
+        # records on the line.
+        markdown = (line.unit_list_price - line.unit_price) * item.quantity
+        discount += markdown + line.discount_amount
 
     cart.item_count = int(count)
     cart.subtotal = _q(subtotal)
@@ -503,8 +576,15 @@ def _serialize(
                     else None
                 ),
                 "unit_price_effective": effective,
-                "line_total": effective * item.quantity,
-                "line_discount": (list_price - effective) * item.quantity,
+                # The promotion is on the line too, not only in the header --
+                # otherwise the lines a shopper reads do not add up to the total
+                # they are asked to pay.
+                "line_total": effective * item.quantity - _q(item.discount_amount),
+                "line_discount": (
+                    (list_price - effective) * item.quantity + _q(item.discount_amount)
+                ),
+                "promotion_id": item.promotion_id,
+                "discount_source": _enum_value(item.discount_source),
                 "price_snapshot_at": item.price_snapshot_at,
                 "last_repriced_at": item.last_repriced_at,
                 "price_changed": current_effective != effective,

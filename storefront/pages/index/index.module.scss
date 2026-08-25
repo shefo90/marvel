@@ -1,0 +1,318 @@
+@use '../../assets/styles/variables' as v;
+
+// --- hero ------------------------------------------------------------------
+.hero {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  min-height: clamp(420px, 62vh, 660px);
+  padding: v.$space-2xl clamp(#{v.$space-lg}, 7vw, 104px);
+  margin-bottom: v.$space-2xl;
+
+  // Full-bleed out of the page container. `margin-inline` is logical, so this
+  // breaks out in both directions without a second rule for RTL. The page
+  // wrapper carries `overflow-x: clip` rather than `hidden`, because hidden on
+  // an ancestor silently disables the header's position: sticky.
+  width: 100vw;
+  margin-inline: calc(50% - 50vw);
+
+  background-color: v.$night;
+  background-size: cover;
+  background-position: center;
+  color: #f6f1ea;
+}
+
+// A directional scrim, not a flat overlay. Text sits over the dark end while
+// the image stays legible at the other, which is what stops a photographic
+// hero from turning into mud.
+// Gradients take no logical direction -- `to inline-end` is not valid CSS -- so
+// the RTL case is the one place here that needs an explicit second rule.
+.heroScrim {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    to right,
+    rgba(20, 17, 14, 0.86) 0%,
+    rgba(20, 17, 14, 0.62) 38%,
+    rgba(20, 17, 14, 0.18) 72%,
+    rgba(20, 17, 14, 0.35) 100%
+  );
+}
+
+:global(:root[dir='rtl']) .heroScrim {
+  background: linear-gradient(
+    to left,
+    rgba(20, 17, 14, 0.86) 0%,
+    rgba(20, 17, 14, 0.62) 38%,
+    rgba(20, 17, 14, 0.18) 72%,
+    rgba(20, 17, 14, 0.35) 100%
+  );
+}
+
+.heroText {
+  max-width: 42ch;
+  position: relative;
+}
+
+.eyebrow {
+  display: inline-block;
+  font-size: v.$text-xs;
+  font-weight: 600;
+  letter-spacing: v.$tracking-wide;
+  text-transform: uppercase;
+  color: rgba(246, 241, 234, 0.82);
+  border: 1px solid rgba(246, 241, 234, 0.34);
+  border-radius: v.$radius-pill;
+  padding: 5px v.$space-md;
+  margin-bottom: v.$space-lg;
+  backdrop-filter: blur(4px);
+}
+
+.heroText h1 {
+  color: inherit;
+  font-size: v.$text-display;
+  font-weight: 600;
+  line-height: 1.06;
+  letter-spacing: v.$tracking-tight;
+  margin: 0 0 v.$space-md;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.32);
+}
+
+.heroText p {
+  color: rgba(246, 241, 234, 0.86);
+  margin: 0 0 v.$space-xl;
+  font-size: v.$text-md;
+  max-width: 44ch;
+}
+
+.heroActions { display: flex; flex-wrap: wrap; gap: v.$space-sm; }
+
+.heroCta,
+.heroGhost {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: v.$text-sm;
+  letter-spacing: v.$tracking-wide;
+  text-transform: uppercase;
+  padding: 14px v.$space-xl;
+  border-radius: v.$radius-pill;
+  transition: transform v.$duration v.$ease, box-shadow v.$duration v.$ease,
+    background v.$duration v.$ease;
+}
+
+.heroCta {
+  background: #f6f1ea;
+  color: v.$ink;
+  border: 1px solid #f6f1ea;
+
+  &:hover { transform: translateY(-1px); box-shadow: v.$shadow-lg; }
+}
+
+.heroGhost {
+  background: transparent;
+  color: #f6f1ea;
+  border: 1px solid rgba(246, 241, 234, 0.5);
+
+  &:hover { background: rgba(246, 241, 234, 0.12); }
+}
+
+// --- section divider -------------------------------------------------------
+.section { margin-bottom: v.$space-2xl; }
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: v.$space-lg;
+  margin-bottom: v.$space-xl;
+}
+
+.rule {
+  flex: 1;
+  height: 1px;
+  background: v.$line;
+}
+
+.dividerHeading {
+  margin: 0;
+  font-size: v.$text-lg;
+  font-weight: 600;
+  letter-spacing: v.$tracking-wide;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+// Absolute so the heading stays optically centred: in flow, the link's width
+// would push it off-centre by half of itself.
+.dividerLink {
+  position: absolute;
+  inset-inline-end: 0;
+  font-size: v.$text-sm;
+  font-weight: 600;
+  text-decoration: none;
+
+  &:hover { text-decoration: underline; }
+}
+
+.divider { position: relative; }
+
+// --- category tiles --------------------------------------------------------
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: v.$space-md;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+
+  a {
+    display: block;
+    text-decoration: none;
+    color: v.$ink;
+  }
+}
+
+.tileFrame {
+  display: block;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: v.$radius;
+  background: v.$ground-deep;
+  margin-bottom: v.$space-sm;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 500ms v.$ease;
+  }
+}
+
+.tiles a:hover .tileFrame img { transform: scale(1.05); }
+
+.tileLabel {
+  display: block;
+  text-align: center;
+  font-size: v.$text-sm;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.tiles a:hover .tileLabel { color: v.$accent-ink; }
+
+// --- product grids ---------------------------------------------------------
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: v.$space-xl v.$space-md;
+}
+
+.empty { margin: 0; color: v.$ink-soft; }
+
+// --- edits -----------------------------------------------------------------
+.edits {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: v.$space-md;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+
+  a {
+    position: relative;
+    display: block;
+    overflow: hidden;
+    border-radius: v.$radius;
+    text-decoration: none;
+    color: #f6f1ea;
+    background: v.$night;
+  }
+}
+
+.editFrame {
+  display: block;
+  aspect-ratio: 3 / 2;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    opacity: 0.72;
+    transition: transform 600ms v.$ease, opacity v.$duration v.$ease;
+  }
+}
+
+.edits a:hover .editFrame img { transform: scale(1.06); opacity: 0.85; }
+
+.editBody {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  padding: v.$space-lg;
+  background: linear-gradient(
+    to top,
+    rgba(20, 17, 14, 0.82) 0%,
+    rgba(20, 17, 14, 0) 100%
+  );
+}
+
+.editTitle {
+  display: block;
+  font-weight: 600;
+  font-size: v.$text-md;
+  letter-spacing: 0.02em;
+}
+
+.editCta {
+  display: block;
+  font-size: v.$text-xs;
+  letter-spacing: v.$tracking-wide;
+  text-transform: uppercase;
+  color: rgba(246, 241, 234, 0.78);
+  margin-top: 2px;
+}
+
+// --- promises --------------------------------------------------------------
+.promises {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: v.$space-md;
+  list-style: none;
+  margin: 0 0 v.$space-2xl;
+  padding: v.$space-xl 0 0;
+  border-top: 1px solid v.$line;
+
+  li { text-align: center; }
+}
+
+.promiseTitle {
+  display: block;
+  font-weight: 600;
+  font-size: v.$text-sm;
+  letter-spacing: 0.02em;
+  margin-bottom: 2px;
+}
+
+.promiseBody {
+  display: block;
+  font-size: v.$text-sm;
+  color: v.$ink-soft;
+}
+
+@media (max-width: 760px) {
+  .hero { min-height: 380px; padding-block: v.$space-xl; }
+  .divider { gap: v.$space-md; }
+  .dividerLink { position: static; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heroCta, .heroGhost, .tileFrame img, .editFrame img { transition: none; }
+  .heroCta:hover { transform: none; }
+  .tiles a:hover .tileFrame img,
+  .edits a:hover .editFrame img { transform: none; }
+}

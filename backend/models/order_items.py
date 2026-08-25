@@ -20,6 +20,7 @@ derived later.
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
+    Enum as SAEnum,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
@@ -33,6 +34,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import mapped_column, relationship
 
 from core.db import Base
+from core.enums import DiscountSource
 from models.mixins import TimestampMixin
 
 
@@ -77,6 +79,16 @@ class OrderItem(Base, TimestampMixin):
 
     # --- Section 11A historical cost snapshot -----------------------------
     unit_cogs = mapped_column(Numeric(12, 2), nullable=True)
+
+    # Section 4.4. discount_amount already exists above; these say WHY it is
+    # what it is, which is what makes promotion_cost_total auditable rather
+    # than merely a number.
+    promotion_id = mapped_column(
+        BigInteger, ForeignKey("promotions.id", ondelete="SET NULL"), nullable=True
+    )
+    discount_source = mapped_column(
+        SAEnum(DiscountSource, native_enum=False, length=16), nullable=True
+    )
     line_cogs = mapped_column(Numeric(12, 2), nullable=True)
     # 'variant_cost' when the catalog had a cost, 'unknown' when it did not —
     # so a null margin is distinguishable from a genuinely zero one.

@@ -11,6 +11,8 @@ passlib==1.7.4
 bcrypt==4.0.1
 python-dotenv==1.0.1
 python-multipart==0.0.20
+# Image decode, EXIF strip and derivative generation -- admin stage 2.
+Pillow==12.3.0
 redis==5.2.1
 pytest==8.3.4
 httpx==0.28.1

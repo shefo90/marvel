@@ -1,13 +1,16 @@
-__pycache__
-*.py[cod]
-venv
-.venv
+# Never in an image. backend/.env holds real database credentials, and a COPY
+# that sweeps it in bakes them into a layer anyone who pulls the image can read.
 .env
-.pytest_cache
-.mypy_cache
-tests
+*.env
+!*.env.example
 
-# NOTE: alembic/ is deliberately NOT ignored. The container runs
-# `alembic upgrade head` on startup (see docker-compose.yml), so excluding the
-# migration scripts makes the API fail to boot with
-# "Path doesn't exist: '/app/alembic'".
+# A host virtualenv is the wrong platform's binaries and hundreds of megabytes.
+# The image installs its own from requirements.txt.
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Uploaded photographs live in a volume, not in the image.
+media/

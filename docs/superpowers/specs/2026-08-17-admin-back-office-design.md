@@ -1,6 +1,8 @@
 # Admin Back-Office — Design
 
-**Status:** approved in conversation 2026-08-17, not yet implemented (foundation only).
+**Status:** approved 2026-08-17. All four stages implemented as of 2026-08-19 — catalog writes,
+images, offers and the admin UI. Migration 0005 applied. Order management remains undesigned and
+unbuilt; it was never part of these four stages.
 **Prerequisite reading:** [`2026-08-16-s1-commerce-core-design.md`](2026-08-16-s1-commerce-core-design.md)
 (the S1 design, especially §5 money model and §6 URL contract) and
 [`2026-08-17-s1-audit-findings.md`](2026-08-17-s1-audit-findings.md) (F5, which this closes).

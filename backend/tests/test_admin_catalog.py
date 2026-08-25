@@ -169,6 +169,76 @@ def e2e_cleanup():
         db.close()
 
 
+def test_the_cache_is_dropped_only_once_the_edit_is_visible_to_other_connections(
+    client, staff_token, e2e_cleanup, monkeypatch
+):
+    """The whole point of deferring the invalidation, asserted from outside.
+
+    ``test_admin_cache.py`` proves the deferral by draining the queue by hand,
+    which cannot show that the route's ``db.commit()`` is what drains it in
+    production. So this reads the product from a *separate* connection at the
+    moment the invalidation fires. If the drop still happens inside the write
+    transaction, that connection sees the pre-edit row -- which is exactly what
+    a storefront read landing in the window would see, and would then cache for
+    the next sixty seconds.
+    """
+    from sqlalchemy import select
+
+    from models.products import Product
+    from services import cache
+
+    token = staff_token("catalog")
+    auth = {"Authorization": f"Bearer {token}"}
+    slug = f"cache-http-{uuid.uuid4().hex[:8]}"
+
+    created = client.post("/api/admin/products", headers=auth, json={
+        "title": "Cache Sandal", "slug": slug, "brand": "Pixi",
+        "category_id": _any_level2_category_id(),
+    })
+    assert created.status_code == 201, created.text
+    e2e_cleanup.append(slug)
+    product_id = created.json()["id"]
+
+    # The key map is built from the translation rows, so the product needs one.
+    tr = client.put(
+        f"/api/admin/products/{product_id}/translations/en", headers=auth,
+        json={"title": "Cache Sandal", "slug": slug, "description": "A sandal",
+              "meta_description": "short"},
+    )
+    assert tr.status_code == 200, tr.text
+
+    visible_at_invalidation: list[str] = []
+    real_invalidate = cache.invalidate_product
+
+    def watching_invalidate(pid: int, slugs_by_locale: dict[str, str]) -> None:
+        probe = SessionLocal()
+        try:
+            visible_at_invalidation.append(
+                probe.execute(
+                    select(Product.brand).where(Product.id == pid)
+                ).scalar_one()
+            )
+        finally:
+            probe.close()
+        real_invalidate(pid, slugs_by_locale)
+
+    monkeypatch.setattr(cache, "invalidate_product", watching_invalidate)
+
+    key = cache.key(cache.NS_PRODUCT, "en", slug)
+    cache.set(key, {"price": "before the edit"})
+
+    edit = client.patch(
+        f"/api/admin/products/{product_id}", headers=auth, json={"brand": "Renamed"}
+    )
+    assert edit.status_code == 200, edit.text
+
+    assert visible_at_invalidation == ["Renamed"], (
+        "the cache was dropped while the edit was still uncommitted -- another "
+        "connection reading here would refill it with the pre-edit row"
+    )
+    assert cache.get(key) is None
+
+
 def test_operator_can_take_a_product_from_nothing_to_published(client, staff_token, e2e_cleanup):
     """The whole point of this slice: a shop operator, not a developer."""
     token = staff_token("catalog")

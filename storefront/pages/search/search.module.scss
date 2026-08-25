@@ -1,0 +1,74 @@
+@use '../../assets/styles/variables' as v;
+
+.page {
+  display: grid;
+  gap: v.$space-lg;
+}
+
+.intro {
+  display: grid;
+  gap: v.$space-md;
+  max-width: 40rem;
+
+  h1 {
+    margin: 0;
+    font-size: v.$text-xl;
+    letter-spacing: v.$tracking-tight;
+  }
+}
+
+.box {
+  display: flex;
+  gap: v.$space-sm;
+
+  input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.7rem 0.9rem;
+    border: 1px solid v.$line;
+    border-radius: v.$radius-pill;
+    background: v.$surface;
+    color: v.$ink;
+    font: inherit;
+
+    &:focus-visible {
+      outline: 2px solid v.$accent;
+      outline-offset: 1px;
+    }
+  }
+
+  button {
+    padding: 0.7rem 1.4rem;
+    border: 0;
+    border-radius: v.$radius-pill;
+    background: v.$accent;
+    color: #fff;
+    font: inherit;
+    cursor: pointer;
+
+    &:hover { background: v.$accent-ink; }
+  }
+}
+
+.count {
+  margin: 0;
+  color: v.$ink-soft;
+  font-size: v.$text-sm;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: v.$space-lg;
+}
+
+.empty {
+  padding: v.$space-xl 0;
+  color: v.$ink-soft;
+  text-align: center;
+}
+
+.hint {
+  margin: v.$space-xs 0 0;
+  font-size: v.$text-sm;
+}

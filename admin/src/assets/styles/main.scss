@@ -1,0 +1,19 @@
+@use 'variables' as v;
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  // Ant Design resets the rest; this only sets the page ground so the layout
+  // sider and content do not sit on browser white.
+  background: #f5f5f5;
+}
+
+.app-content {
+  max-width: v.$content-max-width;
+  padding: v.$space-lg;
+}

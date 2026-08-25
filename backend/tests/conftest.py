@@ -47,3 +47,68 @@ def conn():
     finally:
         trans.rollback()
         connection.close()
+
+
+@pytest.fixture(autouse=True)
+def _purge_rows_this_test_committed():
+    """Delete orders and customers committed during the test.
+
+    Most tests here write inside a transaction the ``db`` fixture rolls back.
+    The checkout tests cannot: they place orders over HTTP, and the request
+    handler commits its own session. Nothing undid those, so every full run left
+    another dozen orders behind -- the development database had accumulated
+    1,115 of them by the time anyone counted.
+
+    Identifying them by ``id > max(id) at test start`` rather than by a naming
+    convention means a test does not have to opt in or remember to clean up,
+    which is the property the previous arrangement lacked. ``orders.id`` is a
+    BIGSERIAL, so the watermark is monotonic even across rolled-back inserts
+    that burned sequence values.
+
+    The same problem exists one table along: the checkout tests resolve a guest
+    customer per order, and 988 of them had built up beside the 1,115 orders.
+    They are removed in dependency order, orders first.
+
+    Failures are swallowed. This is cleanup: a purge that cannot run must not
+    turn a passing test red, and the worst case is the residue the suite had
+    before.
+    """
+    from sqlalchemy import func, select
+
+    from models.customers import Customer
+    from models.orders import Order
+    from repositories.maintenance import delete_customers, delete_orders
+
+    probe = SessionLocal()
+    try:
+        orders_mark = probe.execute(select(func.max(Order.id))).scalar() or 0
+        customers_mark = probe.execute(select(func.max(Customer.id))).scalar() or 0
+    finally:
+        probe.close()
+
+    yield
+
+    session = SessionLocal()
+    try:
+        leaked_orders = session.execute(
+            select(Order.id).where(Order.id > orders_mark)
+        ).scalars().all()
+        if leaked_orders:
+            delete_orders(session, leaked_orders)
+
+        # Customers after orders, never before: orders.customer_id is
+        # ON DELETE RESTRICT, so a guest who ordered during this test can only
+        # be removed once their order has gone. delete_customers skips anyone
+        # still referenced rather than raising.
+        leaked_customers = session.execute(
+            select(Customer.id).where(Customer.id > customers_mark)
+        ).scalars().all()
+        if leaked_customers:
+            delete_customers(session, leaked_customers)
+
+        if leaked_orders or leaked_customers:
+            session.commit()
+    except Exception:  # noqa: BLE001 - see docstring
+        session.rollback()
+    finally:
+        session.close()

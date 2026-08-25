@@ -1,0 +1,22 @@
+@use '../../assets/styles/variables' as v;
+
+.filters {
+  margin-bottom: v.$space-md;
+}
+
+.search {
+  width: 280px;
+}
+
+.status {
+  width: 180px;
+}
+
+.error {
+  margin-bottom: v.$space-md;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}

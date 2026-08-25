@@ -36,6 +36,8 @@ from repositories.admin_slugs import (
     release_live_path,
 )
 from services import cache
+from services.cache_invalidation import on_commit
+from services.optimistic_lock import guard_unmodified
 from services.role_access_level import LEVEL_ADMIN, set_access_level
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
@@ -331,14 +333,21 @@ def upsert_translation(db: Session, actor, product_id: int, locale: str, payload
 def _invalidate(
     db: Session, product_id: int, stale: list[tuple[str, str]] | None = None
 ) -> None:
-    """Drop every cached copy of this product, in every locale it has.
+    """Drop every cached copy of this product, in every locale it has — once
+    the caller's transaction has committed.
 
     invalidate_product's docstring is explicit that a missing locale leaves that
     locale serving stale content, so the map is read from the rows rather than
     assumed. ``stale`` carries (locale, slug) pairs that are no longer on any
     row — a slug a caller just renamed away from — so the entry cached under
     the retired slug (``repositories.product.get_product_by_slug`` keys on it)
-    is dropped immediately instead of waiting out its TTL.
+    is dropped instead of waiting out its TTL.
+
+    The slug map is read here, inside the transaction, where the flushed rows
+    are already visible; only the Redis writes wait for the commit. Dropping
+    the keys before the commit is what ``services.cache_invalidation`` exists to
+    prevent: it left a whole transaction's worth of window in which a storefront
+    read could re-cache the pre-commit price for the next sixty seconds.
     """
     slugs = {
         loc: slug
@@ -348,9 +357,15 @@ def _invalidate(
             )
         ).all()
     }
-    cache.invalidate_product(product_id, slugs)
-    if stale:
-        cache.delete(*(cache.key(cache.NS_PRODUCT, loc, slug) for loc, slug in stale))
+
+    def drop() -> None:
+        cache.invalidate_product(product_id, slugs)
+        if stale:
+            cache.delete(
+                *(cache.key(cache.NS_PRODUCT, loc, slug) for loc, slug in stale)
+            )
+
+    on_commit(db, drop)
 
 
 def _clean_sku_segment(raw: str) -> str:
@@ -516,6 +531,11 @@ def generate_variants(db, actor, product_id: int, sizes, colors, defaults: dict)
     return created
 
 
+def _enum_value(value):
+    """SAEnum columns hand back enum members; the API contract is strings."""
+    return value.value if hasattr(value, "value") else value
+
+
 def get_product_for_admin(db, product_id: int) -> dict:
     """Everything the editor needs, regardless of publish state.
 
@@ -533,6 +553,15 @@ def get_product_for_admin(db, product_id: int) -> dict:
             "description": t.description,
             "slug": t.slug,
             "meta_description": t.meta_description,
+            # The rest of what upsert_translation accepts. Returning fewer
+            # fields than the editor can write means the form either hides them
+            # or sends "" for values it never saw -- and these are the SEO and
+            # Open Graph fields, which is the worst possible thing to wipe.
+            "seo_title": t.seo_title,
+            "og_title": t.og_title,
+            "og_description": t.og_description,
+            "og_image_url": t.og_image_url,
+            "image_alt": t.image_alt,
             "is_published": t.is_published,
             "is_complete": t.is_complete,
         }
@@ -554,6 +583,10 @@ def get_product_for_admin(db, product_id: int) -> dict:
             "sale_price": v.sale_price,
             "stock_quantity": v.stock_quantity,
             "is_active": v.is_active,
+            # Per row: the variant grid edits in place, and the product's
+            # own version would refuse an edit to one variant because a
+            # different one had moved.
+            "updated_at": v.updated_at,
         }
         for v in db.execute(
             select(ProductVariant)
@@ -562,16 +595,44 @@ def get_product_for_admin(db, product_id: int) -> dict:
         ).scalars()
     ]
 
+    images = [
+        {
+            "id": i.id,
+            "url": i.url,
+            "alt_text": i.alt_text,
+            "width": i.width,
+            "height": i.height,
+            "is_primary": i.is_primary,
+            "position": i.position,
+            "variant_id": i.variant_id,
+        }
+        for i in db.execute(
+            select(ProductImage)
+            .where(ProductImage.product_id == product_id)
+            .order_by(ProductImage.variant_id.nulls_first(), ProductImage.position)
+        ).scalars()
+    ]
+
     return {
         "id": product.id,
+        "updated_at": product.updated_at,
         "item_group_id": product.item_group_id,
         "slug": product.slug,
         "title": product.title,
         "brand": product.brand,
-        "status": product.status.value if hasattr(product.status, "value") else product.status,
+        "status": _enum_value(product.status),
         "category_id": product.category_id,
+        # Every field _EDITABLE_BASE_FIELDS lets update_product write. The
+        # editor could previously write these without being able to read them,
+        # so the form rendered blank for values that existed.
+        "description": product.description,
+        "condition": _enum_value(product.condition),
+        "gender": _enum_value(product.gender),
+        "age_group": _enum_value(product.age_group),
+        "tags": list(product.tags or []),
         "translations": translations,
         "variants": variants,
+        "images": images,
     }
 
 
@@ -586,6 +647,8 @@ def update_product(db, actor, product_id: int, payload: dict):
     product = db.get(Product, product_id)
     if product is None:
         raise HTTPException(status_code=404, detail="product not found")
+
+    guard_unmodified(product, payload, what="product")
 
     if "slug" in payload and payload["slug"] != product.slug:
         slug = (payload["slug"] or "").strip().lower()
@@ -673,6 +736,8 @@ def update_variant(db, actor, variant_id: int, payload: dict):
     variant = db.get(ProductVariant, variant_id)
     if variant is None:
         raise HTTPException(status_code=404, detail="variant not found")
+
+    guard_unmodified(variant, payload, what="variant")
 
     if "sku" in payload and payload["sku"] is not None and payload["sku"] != variant.sku:
         # trg_variants_sku_immutable would raise a restrict_violation. Refusing

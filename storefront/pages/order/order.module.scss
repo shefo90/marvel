@@ -1,0 +1,28 @@
+@use '../../assets/styles/variables' as v;
+
+.panel {
+  background: v.$surface;
+  border: 1px solid v.$line;
+  border-radius: v.$radius;
+  padding: v.$space-xl;
+  max-width: 560px;
+}
+
+.number {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 20px;
+  // The order number is Latin whichever language the page is in.
+  direction: ltr;
+  display: inline-block;
+  background: v.$ground;
+  padding: v.$space-xs v.$space-md;
+  border-radius: v.$radius;
+}
+
+.note { color: v.$ink-soft; }
+
+.keepShopping {
+  display: inline-block;
+  margin-top: v.$space-lg;
+  color: v.$accent-ink;
+}

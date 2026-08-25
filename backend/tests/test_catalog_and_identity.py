@@ -104,3 +104,23 @@ def test_price_bearing_response_is_not_long_cached(client):
     """A stale cached price IS the 'price mismatch' defect section 8 monitors."""
     r = client.get("/api/en/products/leather-strap-sandal")
     assert "max-age=60" in r.headers.get("cache-control", "")
+
+
+def test_a_listing_row_carries_the_sku_whose_price_it_advertises(client):
+    """Section 2 makes the SKU the sellable identifier and says it is the same
+    value GA4 and Ads use. Without it on a listing row, view_item_list and
+    select_item have no item_id at all -- every join from a list impression to
+    revenue breaks, silently, because GA4 accepts the event regardless.
+
+    The SKU is the cheapest active variant's: that is the variant whose price
+    the row is showing, so attributing the impression to any other would
+    advertise one price and identify a different item.
+    """
+    body = client.get("/api/en/products").json()
+    assert body["items"], "seed data must provide at least one listed product"
+
+    row = body["items"][0]
+    detail = client.get(f"/api/en/products/{row['slug']}").json()
+
+    assert row["sku"], "listing rows must carry an item_id for analytics"
+    assert row["sku"] in {variant["sku"] for variant in detail["variants"]}

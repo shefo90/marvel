@@ -106,6 +106,17 @@ def rotate_staff_token(db: Session, raw_token: str, claims: dict) -> dict:
     return tokens
 
 
+def revoke_customer_token(db: Session, raw_token: str, claims: dict) -> None:
+    """Sign-out. Revokes the row without issuing a replacement.
+
+    Deleting the cookie alone would not do: the value has already been on the
+    wire, and a token that still verifies is still a session to anyone holding
+    a copy. Revoking is what makes signing out mean something.
+    """
+    _consume(db, CustomerRefreshToken, raw_token, claims)
+    db.commit()
+
+
 def rotate_customer_token(db: Session, raw_token: str, claims: dict) -> dict:
     row = _consume(db, CustomerRefreshToken, raw_token, claims)
 

@@ -7,11 +7,18 @@ LookupError on every subsequent read of the row — the product becomes
 unloadable. Rejecting it at the boundary is the only place that costs nothing.
 """
 
+from datetime import datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
-from core.enums import AgeGroup, Gender, ProductCondition
+from core.enums import (
+    AgeGroup,
+    Gender,
+    ProductCondition,
+    PromotionTargetType,
+    PromotionType,
+)
 
 
 class translation_state(BaseModel):
@@ -38,6 +45,23 @@ class admin_product_list_response(BaseModel):
     page: int
     page_size: int
     total: int
+
+
+class admin_category_row(BaseModel):
+    """One choice in the product form's category picker.
+
+    ``parent_name`` because "Sandals" is meaningless on its own and two parents
+    may each have one; ``is_active`` because an inactive category is shown and
+    marked rather than hidden.
+    """
+
+    id: int
+    name: str
+    slug: str
+    parent_id: int
+    parent_name: str
+    position: int
+    is_active: bool
 
 
 class admin_product_create(BaseModel):
@@ -84,6 +108,13 @@ class admin_translation_detail(BaseModel):
     description: str | None
     slug: str
     meta_description: str | None
+    # Optional so the upsert and publish routes, which return an ORM row rather
+    # than the editor's dict, keep validating against this same model.
+    seo_title: str | None = None
+    og_title: str | None = None
+    og_description: str | None = None
+    og_image_url: str | None = None
+    image_alt: str | None = None
     is_published: bool
     is_complete: bool
 
@@ -106,6 +137,7 @@ class admin_blocker(BaseModel):
 
 class admin_variant_row(BaseModel):
     id: int
+    updated_at: datetime | None = None
     sku: str
     variant_title: str
     size: str | None
@@ -126,6 +158,10 @@ class admin_product_update(BaseModel):
     condition: ProductCondition | None = None
     gender: Gender | None = None
     age_group: AgeGroup | None = None
+    # The row version this edit was built from. Optional: omitting it keeps
+    # the previous last-write-wins behaviour, which is what every caller
+    # written before this field did. See services/optimistic_lock.py.
+    expected_updated_at: datetime | None = None
 
 
 class admin_variant_update(BaseModel):
@@ -149,15 +185,118 @@ class admin_variant_update(BaseModel):
     height_cm: Decimal | None = None
     merchant_eligible: bool | None = None
     is_active: bool | None = None
+    # The row version this edit was built from. Optional: omitting it keeps
+    # the previous last-write-wins behaviour, which is what every caller
+    # written before this field did. See services/optimistic_lock.py.
+    expected_updated_at: datetime | None = None
+
+
+class admin_promotion_target(BaseModel):
+    """``all`` covers the catalogue and takes no id; everything else needs one."""
+
+    target_type: PromotionTargetType
+    target_id: int | None = None
+
+
+class admin_promotion_target_row(admin_promotion_target):
+    id: int
+
+
+class admin_promotion_create(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    type: PromotionType
+    discount_percent: Decimal | None = Field(default=None, gt=0, le=100)
+    discount_amount: Decimal | None = Field(default=None, gt=0)
+    buy_quantity: int | None = Field(default=None, gt=0)
+    get_quantity: int | None = Field(default=None, gt=0)
+    get_discount_percent: Decimal | None = Field(default=None, gt=0, le=100)
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    is_active: bool = True
+    # Required at the boundary too: a promotion with no targets discounts
+    # nothing, and saving one is never what the operator meant.
+    targets: list[admin_promotion_target] = Field(min_length=1)
+
+
+class admin_promotion_update(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    discount_percent: Decimal | None = Field(default=None, gt=0, le=100)
+    discount_amount: Decimal | None = Field(default=None, gt=0)
+    buy_quantity: int | None = Field(default=None, gt=0)
+    get_quantity: int | None = Field(default=None, gt=0)
+    get_discount_percent: Decimal | None = Field(default=None, gt=0, le=100)
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    is_active: bool | None = None
+    targets: list[admin_promotion_target] | None = None
+
+
+class admin_promotion_row(BaseModel):
+    id: int
+    name: str
+    type: str
+    discount_percent: Decimal | None = None
+    discount_amount: Decimal | None = None
+    buy_quantity: int | None = None
+    get_quantity: int | None = None
+    get_discount_percent: Decimal | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    is_active: bool
+    targets: list[admin_promotion_target_row] = []
+
+
+class admin_image_row(BaseModel):
+    id: int
+    url: str
+    alt_text: str
+    width: int
+    height: int
+    is_primary: bool
+    position: int
+    variant_id: int | None = None
+
+
+class admin_image_order(BaseModel):
+    """The whole set, in the order it should hold.
+
+    Every image exactly once: uq_product_images_position is not deferrable, so a
+    partial list leaves the omitted rows holding positions the new ones collide
+    with.
+    """
+
+    image_ids: list[int] = Field(min_length=1)
+    variant_id: int | None = None
+
+
+class admin_image_alt_upsert(BaseModel):
+    alt_text: str = Field(min_length=1, max_length=500)
+    title_attr: str | None = None
+
+
+class admin_image_translation_detail(BaseModel):
+    locale: str
+    alt_text: str
+    title_attr: str | None = None
 
 
 class admin_product_full(BaseModel):
     id: int
+    updated_at: datetime | None = None
     item_group_id: str
     slug: str
     title: str
     brand: str
     status: str
     category_id: int
+    # Everything the editor is allowed to change. Reading back exactly the set
+    # admin_product_update writes is what keeps the form from showing blank for
+    # a value that exists.
+    description: str | None = None
+    condition: str | None = None
+    gender: str | None = None
+    age_group: str | None = None
+    tags: list[str] = []
     translations: list[admin_translation_detail]
     variants: list[admin_variant_row]
+    images: list[admin_image_row] = []

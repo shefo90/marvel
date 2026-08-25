@@ -1,0 +1,109 @@
+@use '../../assets/styles/variables' as v;
+
+.layout { display: grid; gap: v.$space-lg; }
+
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  gap: v.$space-sm;
+  font-size: 12px;
+  color: v.$ink-soft;
+  margin-bottom: v.$space-sm;
+
+  a { color: v.$ink-soft; }
+}
+
+.intro h1 { margin-bottom: v.$space-xs; }
+
+.blurb {
+  color: v.$ink-soft;
+  max-width: 60ch;
+  margin: 0;
+}
+
+.children {
+  display: flex;
+  flex-wrap: wrap;
+  gap: v.$space-sm;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+
+  a {
+    display: inline-block;
+    padding: 6px v.$space-md;
+    border: 1px solid v.$line;
+    border-radius: 999px;
+    background: v.$surface;
+    font-size: 13px;
+    color: v.$ink;
+    text-decoration: none;
+
+    &:hover { border-color: v.$ink-soft; }
+  }
+}
+
+.body {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: v.$space-xl;
+  align-items: start;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: v.$space-md;
+  padding-bottom: v.$space-md;
+  border-bottom: 1px solid v.$line;
+  margin-bottom: v.$space-lg;
+}
+
+.total { font-size: 13px; color: v.$ink-soft; }
+
+.sorts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: v.$space-sm;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sort,
+.sortOn {
+  font-size: 13px;
+  text-decoration: none;
+  color: v.$ink-soft;
+  padding: 4px v.$space-sm;
+  border-radius: 6px;
+
+  &:hover { color: v.$ink; }
+}
+
+.sortOn {
+  color: v.$ink;
+  font-weight: 600;
+  background: v.$surface;
+  border: 1px solid v.$line;
+}
+
+.grid {
+  display: grid;
+  // The card has a floor rather than a fixed width, so the same rule serves a
+  // phone and a wide desktop without a breakpoint per column count.
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: v.$space-lg;
+}
+
+.empty {
+  color: v.$ink-soft;
+  padding: v.$space-xl 0;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .body { grid-template-columns: 1fr; gap: v.$space-lg; }
+}

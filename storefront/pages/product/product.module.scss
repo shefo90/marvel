@@ -1,0 +1,132 @@
+@use '../../assets/styles/variables' as v;
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: v.$space-xl;
+
+  @media (max-width: 860px) {
+    grid-template-columns: 1fr;
+    gap: v.$space-lg;
+  }
+}
+
+.gallery {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-md;
+  align-items: flex-start;
+}
+
+// A fixed ratio on both, so the frame is the same size whether the file
+// arrives, arrives late, or never arrives at all. Without it a missing image
+// collapses to nothing and a slow one shoves the whole page down when it lands.
+.hero {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  border-radius: v.$radius;
+  background: v.$surface;
+}
+
+.thumb {
+  width: 100%;
+  max-width: 160px;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: v.$radius;
+  background: v.$surface;
+}
+
+.gallery > .thumb + .thumb { margin-top: 0; }
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-sm;
+}
+
+.brand {
+  margin: 0;
+  color: v.$ink-soft;
+}
+
+.price {
+  font-size: 20px;
+  margin-block: v.$space-sm;
+}
+
+.soldOut {
+  color: v.$sale;
+  font-weight: 600;
+}
+
+.sizes {
+  border: 0;
+  padding: 0;
+  margin: v.$space-sm 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: v.$space-sm;
+
+  legend {
+    padding: 0;
+    margin-bottom: v.$space-xs;
+    font-weight: 600;
+  }
+}
+
+.sizeOption {
+  position: relative;
+  border: 1px solid v.$line;
+  border-radius: v.$radius;
+  padding: v.$space-sm v.$space-md;
+  cursor: pointer;
+  background: v.$surface;
+
+  // The native radio stays in the DOM and focusable. display:none would take
+  // it out of the tab order and off the keyboard entirely.
+  input {
+    position: absolute;
+    opacity: 0;
+    inset: 0;
+    margin: 0;
+    cursor: pointer;
+  }
+
+  &:has(input:checked) {
+    border-color: v.$accent;
+    box-shadow: inset 0 0 0 1px v.$accent;
+  }
+
+  &:has(input:focus-visible) {
+    outline: 2px solid v.$accent;
+    outline-offset: 2px;
+  }
+}
+
+.add {
+  align-self: flex-start;
+  background: v.$accent;
+  color: #fff;
+  border: 0;
+  border-radius: v.$radius;
+  padding: v.$space-md v.$space-xl;
+  font-size: 16px;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.status {
+  min-height: 1.5em;
+  margin: v.$space-xs 0 0;
+  color: v.$accent-ink;
+}
+
+.description {
+  margin-top: v.$space-lg;
+}

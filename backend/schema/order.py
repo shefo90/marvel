@@ -97,6 +97,10 @@ class order_item_response(BaseModel):
     unit_cogs: Decimal | None = None
     line_cogs: Decimal | None = None
     cogs_snapshot_source: str | None = None
+    # Section 4.4 attribution: which offer priced this line, and by which
+    # mechanism. A markdown and a campaign discount are not the same number.
+    promotion_id: int | None = None
+    discount_source: str | None = None
 
 
 class order_address_response(BaseModel):
@@ -184,6 +188,9 @@ class order_response(BaseModel):
     total: Decimal
     gross_order_value: Decimal
     items_cogs_total: Decimal
+    # Only the promotion half of the saving. Markdowns stay out of campaign
+    # cost, per section 4.4.
+    promotion_cost_total: Decimal = Decimal("0.00")
     coupon_code: str | None = None
 
     payment_status: str

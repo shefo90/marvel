@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from core.db import get_db
 from core.enums import ProductStatus
 from models.users import User
+from repositories.admin_categories import list_categories_for_admin
 from repositories.admin_catalog import (
     archive_product,
     create_product,
@@ -31,6 +32,7 @@ from repositories.admin_catalog import (
 from routes.admin_deps import staff_at_least
 from schema.admin_catalog import (
     admin_blocker,
+    admin_category_row,
     admin_product_create,
     admin_product_detail,
     admin_product_full,
@@ -70,6 +72,19 @@ def admin_list_products(
     return list_products_for_admin(
         db, page=page, page_size=page_size, status=status, search=search
     )
+
+
+@router.get("/categories", response_model=list[admin_category_row])
+def admin_list_categories(
+    actor: User = Depends(staff_at_least(LEVEL_CATALOG)),
+    db: Session = Depends(get_db),
+):
+    """Level-2 categories, for the product form's picker.
+
+    Level 2 only, because that is the only level products may attach to —
+    ``products.category_level`` is generated as 2 with a composite FK.
+    """
+    return list_categories_for_admin(db)
 
 
 @router.post(

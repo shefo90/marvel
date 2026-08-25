@@ -1,47 +1,71 @@
-# Local development stack.
+# The whole shop: database, cache, API, worker, storefront, back-office, proxy.
 #
-# Postgres is published on 5433, NOT 5432, so this never collides with a
-# PostgreSQL you already run on the host. The API talks to the `db` service by
-# name on the internal network, so the 5433 mapping only matters when you want
-# to connect from the host (psql, a GUI, or the test suite).
+#     docker compose up -d --build       # everything, on http://localhost
+#     docker compose up -d redis         # just Redis, for the host test suite
 #
-# Redis is published on the standard 6379. If you started a standalone Redis
-# earlier, remove it first or this will fail to bind:
-#     docker rm -f marvel-redis
+# One file for development and production. The difference between them is
+# .env, not a second compose file -- two files with the same services in both
+# is a drift trap, and the one nobody is looking at is the one that goes stale.
+#
+# **Published ports are bound to 127.0.0.1 on purpose.** Postgres, Redis and the
+# API are reachable from this machine exactly as they always were, and from the
+# internet not at all -- even on a VPS, where "publishing" 5432 to 0.0.0.0 is
+# how a small shop's database ends up for sale. Caddy is the only service bound
+# to every interface, because being reachable is its entire job.
+#
+# The storefront and the back-office publish nothing. They are served through
+# Caddy on port 80, which leaves 3000 and 5173 free for `npm run dev` -- so the
+# host-based frontend workflow still works with the stack running.
+#
+# Every secret has a development default so this file runs with no setup. Those
+# defaults are in a tracked file and therefore public: for a real deployment
+# copy .env.example to .env and fill it in. backend/core/config.py refuses to
+# start on the development SECRET_KEY once COOKIE_SECURE is on.
 
 services:
   db:
     image: postgres:17
     container_name: marvel-db
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: marvel
-      POSTGRES_PASSWORD: marvel
-      POSTGRES_DB: marvel
+      POSTGRES_USER: ${POSTGRES_USER:-marvel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-marvel}
+      POSTGRES_DB: ${POSTGRES_DB:-marvel}
     ports:
-      - "5433:5432"
+      # 5433, not 5432, so this never collides with a PostgreSQL already
+      # running on the host -- which is the one the test suite uses.
+      - "127.0.0.1:5433:5432"
     volumes:
       - marvel_pgdata:/var/lib/postgresql/data
     healthcheck:
       # The API must not start migrating against a server that is still booting.
-      test: ["CMD-SHELL", "pg_isready -U marvel -d marvel"]
-      interval: 3s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-marvel} -d ${POSTGRES_DB:-marvel}"]
+      interval: 5s
       timeout: 3s
       retries: 20
 
   redis:
     image: redis:7-alpine
     container_name: marvel-redis
+    restart: unless-stopped
+    # An eviction policy, so a full cache drops its coldest key instead of
+    # refusing writes. Without one, "Redis is full" arrives as a write error in
+    # the middle of a checkout.
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - marvel_redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 3s
+      interval: 5s
       timeout: 3s
       retries: 20
 
   api:
     build: ./backend
     container_name: marvel-api
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
@@ -50,30 +74,152 @@ services:
     environment:
       # Service names, not localhost — inside the network the API reaches
       # Postgres on 5432 regardless of the host-side 5433 mapping.
-      DB_URL: postgresql+psycopg2://marvel:marvel@db:5432/marvel
+      DB_URL: postgresql+psycopg2://${POSTGRES_USER:-marvel}:${POSTGRES_PASSWORD:-marvel}@db:5432/${POSTGRES_DB:-marvel}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      # Dev-only. A real deployment supplies this from a secret manager;
-      # section 13 forbids secrets living in tracked files.
-      SECRET_KEY: dev-only-secret-change-before-any-deployment
+      # Development default, and it is public because this file is tracked.
+      # Anything signed with it can be forged, including an admin token, so a
+      # real deployment MUST set SECRET_KEY in .env. config.py enforces that
+      # whenever COOKIE_SECURE is on.
+      SECRET_KEY: ${SECRET_KEY:-dev-only-secret-change-before-any-deployment}
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: "30"
       REFRESH_TOKEN_EXPIRE_DAYS: "14"
+      # Left empty on purpose. Empty means "decide from the request scheme",
+      # and behind Caddy with --proxy-headers that resolves to https in
+      # production and http locally -- the right answer in both places without
+      # anyone remembering. Set it to 1 in .env for production anyway: it makes
+      # the guarantee explicit and it is what arms the SECRET_KEY check.
+      COOKIE_SECURE: ${COOKIE_SECURE:-}
+      # Absolute URLs for the sitemap, canonicals and hreflang. Wrong here is
+      # not cosmetic: it tells Google the real pages live somewhere else.
+      SITE_BASE_URL: ${PUBLIC_ORIGIN:-http://localhost}
       DEFAULT_CURRENCY: EGP
       DEFAULT_LOCALE: en
-      HOUSE_BRAND: Pixi
-      ORDER_NUMBER_PREFIX: ORD
+      HOUSE_BRAND: ${HOUSE_BRAND:-Pixi}
+      ORDER_NUMBER_PREFIX: ${ORDER_NUMBER_PREFIX:-ORD}
       IDEMPOTENCY_TTL_HOURS: "24"
       GUEST_CART_TTL_DAYS: "30"
       CUSTOMER_CART_TTL_DAYS: "90"
       CART_ABANDONED_AFTER_HOURS: "24"
+      MEDIA_ROOT: /var/lib/marvel/media
+    volumes:
+      # Uploaded imagery. This is the ONLY application state that is not in
+      # Postgres, so a database backup does not cover it -- this volume has to
+      # be in the backup procedure or every product photo is lost on rebuild.
+      # deploy/backup.sh covers both.
+      - marvel_media:/var/lib/marvel/media
     ports:
-      - "8000:8000"
+      # Loopback only. Handy for curl and the API docs; Caddy is how anything
+      # else reaches it. Note this still fights a host uvicorn for 8000 --
+      # run one or the other.
+      - "127.0.0.1:8000:8000"
     # Migrations run before the server accepts traffic. Tables are never created
     # from application code (see the backend architecture rules).
     command: >
       sh -c "alembic upgrade head &&
-             uvicorn main:app --host 0.0.0.0 --port 8000"
+             uvicorn main:app --host 0.0.0.0 --port 8000
+             --proxy-headers --forwarded-allow-ips '*'"
+
+  worker:
+    # Same image as the API, different entry point. The queue is a Postgres
+    # table, so this needs the database and nothing else -- no broker, and no
+    # Redis: see backend/models/jobs.py for why the queue is not in Redis even
+    # though Redis is right there.
+    build: ./backend
+    container_name: marvel-worker
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        # Not for the API itself, but for its migrations: the worker must not
+        # start querying `jobs` before the table exists. It deliberately does
+        # NOT run `alembic upgrade` of its own -- two processes racing to
+        # migrate the same database is how you get a half-applied schema.
+        condition: service_healthy
+    environment:
+      DB_URL: postgresql+psycopg2://${POSTGRES_USER:-marvel}:${POSTGRES_PASSWORD:-marvel}@db:5432/${POSTGRES_DB:-marvel}
+      DEFAULT_CURRENCY: EGP
+      DEFAULT_LOCALE: en
+      CART_ABANDONED_AFTER_HOURS: "24"
+      GUEST_CART_TTL_DAYS: "30"
+      CUSTOMER_CART_TTL_DAYS: "90"
+      # How long a claimed job may stay claimed before another worker assumes
+      # this one died. Must exceed the slowest handler's runtime, or two
+      # workers will run the same job at once.
+      JOB_LEASE_SECONDS: "300"
+      JOB_POLL_SECONDS: "2"
+      JOB_BATCH_SIZE: "5"
+      JOB_MAX_ATTEMPTS: "5"
+    command: ["python", "-m", "workers.runner"]
+    # Overrides the API image's own HEALTHCHECK, which curls :8000/health -- a
+    # port this process does not listen on. Left inherited, the worker reports
+    # unhealthy forever while working perfectly, which teaches everyone to
+    # ignore the column that is supposed to mean something.
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os,psycopg2;psycopg2.connect(os.environ['DB_URL'].replace('postgresql+psycopg2','postgresql')).close()\""]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  storefront:
+    build: ./storefront
+    container_name: marvel-storefront
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      # Server-side rendering calls the API from inside the network, where
+      # there is no browser origin to be relative to. Getting this backwards is
+      # the classic SSR failure: the page renders and every hydrated
+      # interaction 404s, or the reverse.
+      API_ORIGIN: http://api:8000
+      # The public address, so this is the one value here that must NOT be an
+      # internal service name.
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost}
+    # No published port: reached through Caddy, which leaves 3000 free for
+    # `npm run dev`.
+
+  admin:
+    build: ./admin
+    container_name: marvel-admin
+    restart: unless-stopped
+    # Same reasoning: 5173 stays free for the Vite dev server.
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: marvel-caddy
+    restart: unless-stopped
+    depends_on:
+      - storefront
+      - admin
+      - api
+    environment:
+      # ":80" means plain HTTP on every interface, which is what you want
+      # locally and before DNS exists. Set SITE_DOMAIN to a real domain in .env
+      # and Caddy obtains and renews a certificate on its own.
+      SITE_DOMAIN: ${SITE_DOMAIN:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+      # QUIC. Harmless if the host firewall drops it.
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Issued certificates. Losing this volume means re-requesting on every
+      # restart, and Let's Encrypt rate-limits that hard enough to take the site
+      # off TLS for a week.
+      - marvel_caddy_data:/data
+      - marvel_caddy_config:/config
 
 volumes:
   marvel_pgdata:
+  marvel_redis:
+  marvel_media:
+  marvel_caddy_data:
+  marvel_caddy_config:

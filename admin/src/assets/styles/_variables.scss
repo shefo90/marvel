@@ -1,0 +1,11 @@
+// Spacing scale. Ant Design owns colour and typography; this file exists for
+// the layout decisions AntD does not make for us, so the two never disagree
+// about what "medium" means.
+$space-xs: 4px;
+$space-sm: 8px;
+$space-md: 16px;
+$space-lg: 24px;
+$space-xl: 32px;
+
+$content-max-width: 1400px;
+$sider-width: 220px;

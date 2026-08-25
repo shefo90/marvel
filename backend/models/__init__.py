@@ -5,6 +5,9 @@ Alembic's ``env.py`` imports this module, so a table missing from this list is a
 table missing from every migration.
 """
 
+# --- Background work (no FKs: a job outlives the row that queued it) ------
+from .jobs import Job
+
 # --- Localization spine (imported first: translations FK to locales) -------
 from .locales import Locale
 
@@ -24,6 +27,8 @@ from .product_variants import ProductVariant
 from .collections import Collection
 from .collection_products import CollectionProduct
 from .product_images import ProductImage
+from .promotions import Promotion
+from .promotion_targets import PromotionTarget
 from .attribute_values import AttributeValue
 
 # --- Catalog translations --------------------------------------------------
@@ -71,6 +76,12 @@ from .shipment_status_events import ShipmentStatusEvent
 from .order_returns import OrderReturn
 from .order_return_items import OrderReturnItem
 
+# --- Behaviour, not tables -------------------------------------------------
+# Imported last: it registers a flush listener against the models above, so
+# every one of them must already exist. Importing it for the side effect is the
+# point -- nothing references the module by name.
+from . import feed_timestamps  # noqa: F401
+
 __all__ = [
     "Locale",
     "User",
@@ -86,6 +97,8 @@ __all__ = [
     "Collection",
     "CollectionProduct",
     "ProductImage",
+    "Promotion",
+    "PromotionTarget",
     "AttributeValue",
     "ProductTranslation",
     "CategoryTranslation",
@@ -118,4 +131,5 @@ __all__ = [
     "ShipmentStatusEvent",
     "OrderReturn",
     "OrderReturnItem",
+    "Job",
 ]

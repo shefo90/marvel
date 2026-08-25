@@ -1,0 +1,140 @@
+@use '../../../assets/styles/variables' as v;
+
+// The swatch dot's fill, by the canonical code a variant stores. Presentation
+// only: the accessible name is the localized label, so this map never needs an
+// Arabic counterpart.
+$swatches: (
+  'black': #211f1d, 'white': #f4f2ee, 'beige': #d6c6b0, 'brown': #5e4430,
+  'tan': #b0855c, 'navy': #26304c, 'grey': #807e7a, 'red': #962e2c,
+  'pink': #d6a0aa, 'green': #4a604a, 'gold': #ba9a54, 'silver': #babac0,
+);
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.link {
+  color: inherit;
+  text-decoration: none;
+  display: block;
+}
+
+.frame {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  border-radius: v.$radius;
+  background: v.$ground-deep;
+  margin-bottom: v.$space-md;
+  transition: box-shadow v.$duration v.$ease;
+}
+
+.card:hover .frame { box-shadow: v.$shadow-md; }
+
+.image,
+.hoverImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.image { transition: transform 400ms v.$ease; }
+
+// A restrained zoom. Enough to register as responsive, small enough that the
+// product does not appear to change shape under the pointer.
+.card:hover .image { transform: scale(1.03); }
+
+// Stacked, not swapped: see the component. The second file is already fetched,
+// so the first hover does not show a blank frame.
+.hoverImage {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 260ms v.$ease;
+}
+
+.frame:hover .hoverImage,
+.link:focus-visible .hoverImage { opacity: 1; }
+
+.badge {
+  position: absolute;
+  top: v.$space-md;
+  // Logical, not `left`: on the Arabic page this has to sit on the right, and
+  // the whole point of section 6.7 is that no JavaScript decides that.
+  inset-inline-start: v.$space-md;
+  background: v.$sale;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: v.$tracking-wide;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: v.$radius-pill;
+  z-index: 1;
+}
+
+.title {
+  font-size: v.$text-sm;
+  font-weight: 500;
+  line-height: 1.4;
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.link:hover .title { color: v.$accent-ink; }
+
+.swatches,
+.sizes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.swatches { margin-top: v.$space-xs; }
+
+.swatch {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.16);
+  background: #ccc;
+
+  @each $code, $value in $swatches {
+    &[data-colour='#{$code}'] { background: $value; }
+  }
+}
+
+.more {
+  font-size: 10px;
+  color: v.$ink-faint;
+  line-height: 12px;
+}
+
+.sizes {
+  font-size: v.$text-xs;
+  color: v.$ink-faint;
+  margin-top: 2px;
+
+  li::after { content: ','; }
+  li:last-child::after { content: ''; }
+}
+
+.soldOut {
+  font-size: v.$text-xs;
+  color: v.$ink-faint;
+  margin: 2px 0 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .image, .hoverImage, .frame { transition: none; }
+  .card:hover .image { transform: none; }
+}

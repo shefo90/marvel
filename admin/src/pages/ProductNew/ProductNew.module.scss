@@ -1,0 +1,19 @@
+@use '../../assets/styles/variables' as v;
+@use '../../assets/styles/mixins' as m;
+
+.card {
+  max-width: 760px;
+}
+
+.alert {
+  margin-bottom: v.$space-md;
+}
+
+.row {
+  width: 100%;
+  align-items: flex-start;
+}
+
+.field {
+  min-width: 180px;
+}

@@ -1,0 +1,251 @@
+@use '../../../assets/styles/variables' as v;
+@use '../../../assets/styles/mixins' as m;
+
+.header {
+  background: rgba(255, 255, 255, 0.92);
+  // Sticky rather than fixed: fixed takes the header out of flow and every
+  // anchored jump then lands underneath it.
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  border-bottom: 1px solid v.$line;
+  backdrop-filter: blur(10px);
+}
+
+// The two things a first-time Egyptian shopper most needs to know, before they
+// have scrolled anything. Static text, not a rotating carousel: a message that
+// moves is a message half of them will miss.
+.announce {
+  margin: 0;
+  background: v.$night;
+  color: rgba(246, 241, 234, 0.88);
+  text-align: center;
+  font-size: v.$text-xs;
+  letter-spacing: 0.06em;
+  padding: 7px v.$space-md;
+}
+
+// Three tracks, not flex: the brand and the tail size to their content and the
+// nav takes the middle, so the nav stays optically centred no matter how long
+// the cart label or the language names get in either script.
+.bar {
+  @include m.page-width;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: v.$space-lg;
+  min-height: 68px;
+}
+
+.brand {
+  font-size: v.$text-md;
+  font-weight: 700;
+  letter-spacing: v.$tracking-wide;
+  text-transform: uppercase;
+  color: v.$ink;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.nav { flex: 1; min-width: 0; }
+
+.topLevel {
+  display: flex;
+  justify-content: center;
+  gap: v.$space-xl;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.topItem { position: relative; }
+
+.topLink {
+  display: inline-block;
+  padding: 24px 0;
+  color: v.$ink;
+  text-decoration: none;
+  font-size: v.$text-sm;
+  font-weight: 600;
+  letter-spacing: v.$tracking-wide;
+  text-transform: uppercase;
+  position: relative;
+
+  // An underline that grows from the start edge. `inset-inline` means it grows
+  // right-to-left in Arabic without a second rule.
+  &::after {
+    content: '';
+    position: absolute;
+    inset-inline-start: 0;
+    bottom: 18px;
+    height: 1.5px;
+    width: 0;
+    background: v.$ink;
+    transition: width v.$duration v.$ease;
+  }
+
+  &:hover::after { width: 100%; }
+}
+
+.topItem:hover .topLink::after,
+.topItem:focus-within .topLink::after { width: 100%; }
+
+// Hidden by visibility rather than display:none, and present in the markup
+// either way. A crawler reads the links regardless, and CSS alone decides what
+// a pointer sees — no JavaScript is involved in opening this.
+.panel {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 100%;
+  min-width: 240px;
+  background: v.$surface;
+  border: 1px solid v.$line;
+  border-radius: v.$radius;
+  box-shadow: v.$shadow-lg;
+  padding: v.$space-sm;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px);
+  transition: opacity 160ms v.$ease, transform 160ms v.$ease;
+}
+
+.topItem:hover .panel,
+.topItem:focus-within .panel {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+}
+
+.children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+
+  a {
+    display: block;
+    padding: 9px v.$space-md;
+    border-radius: v.$radius-sm;
+    color: v.$ink;
+    text-decoration: none;
+    font-size: v.$text-sm;
+    white-space: nowrap;
+    transition: background v.$duration v.$ease;
+
+    &:hover { background: v.$ground; color: v.$accent-ink; }
+  }
+}
+
+.viewAll {
+  font-weight: 600;
+  color: v.$accent-ink !important;
+  border-top: 1px solid v.$line-soft;
+  margin-top: v.$space-xs;
+  padding-top: v.$space-sm !important;
+  border-radius: 0 !important;
+}
+
+.tail {
+  display: flex;
+  align-items: center;
+  gap: v.$space-lg;
+  flex-shrink: 0;
+  margin-inline-start: auto;
+}
+
+.languages {
+  display: flex;
+  align-items: center;
+  gap: v.$space-sm;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: v.$text-sm;
+
+  a { color: v.$ink-soft; text-decoration: none; &:hover { color: v.$ink; } }
+}
+
+.currentLanguage { font-weight: 700; color: v.$ink; }
+
+.cart {
+  color: v.$ink;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+
+  &:hover { color: v.$accent-ink; }
+}
+
+// Same affordance as the cart, so the two read as one control group rather
+// than a link that happens to sit beside a button.
+.search {
+  display: flex;
+
+  input {
+    width: 12rem;
+    padding: 0.45rem 0.85rem;
+    border: 1px solid v.$line;
+    border-radius: v.$radius-pill;
+    background: v.$ground;
+    color: v.$ink;
+    font: inherit;
+    font-size: v.$text-sm;
+    transition: width v.$duration v.$ease, background v.$duration v.$ease;
+
+    &:focus-visible {
+      width: 16rem;
+      background: v.$surface;
+      outline: 2px solid v.$accent;
+      outline-offset: 1px;
+    }
+  }
+
+  // Below the fold of a phone header there is no room for it; the search page
+  // is still reachable from the footer and by URL.
+  @media (max-width: 720px) {
+    display: none;
+  }
+}
+
+.account {
+  color: v.$ink;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+
+  &:hover { color: v.$accent-ink; }
+}
+
+.cartGlyph { display: inline-flex; }
+
+// Always rendered, including at zero. A badge that appears only once something
+// is in the basket makes the control move the first time a shopper adds
+// anything, right at the moment they are looking somewhere else.
+.count {
+  background: v.$ink;
+  color: #fff;
+  border-radius: v.$radius-pill;
+  min-width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 0 5px;
+}
+
+@media (max-width: 760px) {
+  .bar { flex-wrap: wrap; min-height: 0; padding-block: v.$space-sm; gap: v.$space-md; }
+  .nav { order: 3; width: 100%; overflow-x: auto; }
+  .topLevel { gap: v.$space-md; }
+  .topLink { padding: v.$space-sm 0; &::after { display: none; } }
+  // A hover panel is meaningless on a touch screen: the parent link goes to the
+  // category page, which lists the children as tiles.
+  .panel { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel, .topLink::after, .children a { transition: none; }
+}

@@ -107,6 +107,18 @@ def get_customer_refresh_token(
     return _decode(creds.credentials, REFRESH_TYPE, SCOPE_CUSTOMER)
 
 
+def decode_customer_refresh(token: str) -> dict:
+    """Verify a shopper refresh token that did not arrive in a header.
+
+    The storefront keeps its refresh token in an httpOnly cookie, so there is no
+    ``Authorization`` header to depend on. Same verification as
+    ``get_customer_refresh_token`` -- signature, type and scope -- reached
+    without FastAPI's security scheme, which insists on a header it will not
+    find.
+    """
+    return _decode(token, REFRESH_TYPE, SCOPE_CUSTOMER)
+
+
 def get_optional_customer(
     creds: HTTPAuthorizationCredentials | None = Depends(optional_customer_scheme),
 ) -> dict | None:

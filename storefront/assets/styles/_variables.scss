@@ -1,0 +1,73 @@
+// The storefront's own scale. Nothing here is shared with the admin: that app
+// uses Ant Design's tokens, and the two agree on palette by being given the
+// same values, not by importing each other.
+
+// --- ink -------------------------------------------------------------------
+// Four steps, not two. A single "muted" grey forces every secondary thing to
+// the same weight, which is what makes a page read as flat: captions, metadata
+// and disabled states are not the same kind of quiet.
+$ink: #16130f;
+$ink-strong: #000000;
+$ink-soft: #6b625a;
+$ink-faint: #9c928a;
+
+// --- surfaces --------------------------------------------------------------
+$surface: #ffffff;
+$ground: #faf8f5;
+$ground-deep: #f2ede6;
+$line: #e7e1da;
+$line-soft: #f0ebe4;
+
+// --- brand -----------------------------------------------------------------
+$accent: #a63d5a;
+$accent-ink: #7d2c43;
+$accent-wash: #fbf1f3;
+$sale: #b3261e;
+
+// Reserved for the hero and any full-bleed panel. A near-black with warmth in
+// it, so it sits beside $ground rather than punching a hole in the page.
+$night: #1f1b17;
+$night-soft: #332b25;
+
+// --- type ------------------------------------------------------------------
+// IBM Plex Sans Arabic covers Latin and Arabic, so one stack serves both
+// locales and the shop keeps one voice across the language switch.
+$font-body: 'IBM Plex Sans Arabic', system-ui, -apple-system, 'Segoe UI', Tahoma,
+  sans-serif;
+
+// A fifth-based scale. Named by role, not by size, so a heading that needs to
+// be smaller changes role rather than picking an arbitrary pixel value.
+$text-xs: 11px;
+$text-sm: 13px;
+$text-base: 15px;
+$text-md: 17px;
+$text-lg: clamp(19px, 2vw, 22px);
+$text-xl: clamp(22px, 2.6vw, 28px);
+$text-display: clamp(30px, 5vw, 52px);
+
+$tracking-wide: 0.08em;
+$tracking-tight: -0.02em;
+
+// --- space -----------------------------------------------------------------
+$space-xs: 4px;
+$space-sm: 8px;
+$space-md: 16px;
+$space-lg: 24px;
+$space-xl: 48px;
+$space-2xl: 80px;
+
+// --- form ------------------------------------------------------------------
+$page-max: 1240px;
+$radius-sm: 6px;
+$radius: 10px;
+$radius-lg: 18px;
+$radius-pill: 999px;
+
+// Warm-tinted rather than neutral black, so a shadow on $ground reads as depth
+// instead of grime.
+$shadow-sm: 0 1px 2px rgba(31, 27, 23, 0.05);
+$shadow-md: 0 6px 20px rgba(31, 27, 23, 0.08);
+$shadow-lg: 0 18px 44px rgba(31, 27, 23, 0.12);
+
+$ease: cubic-bezier(0.2, 0, 0.2, 1);
+$duration: 200ms;

@@ -1,0 +1,91 @@
+@use 'variables' as v;
+@use 'mixins' as m;
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html, body { margin: 0; padding: 0; }
+
+body {
+  background: v.$ground;
+  color: v.$ink;
+  font-family: v.$font-body;
+  font-size: v.$text-base;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+
+  // Lets a section break out to the full viewport width with
+  // `margin-inline: calc(50% - 50vw)` without the 100vw creating a horizontal
+  // scrollbar. It belongs on body, NOT on the width-constrained `.page`: an
+  // overflow value there establishes a clipping box at that element's edges, so
+  // it cuts the break-out off instead of containing it — which clipped the
+  // hero's own headline off the side of the page.
+  //
+  // `clip` rather than `hidden`: `hidden` on an ancestor silently disables the
+  // header's position: sticky.
+  overflow-x: clip;
+}
+
+// Arabic needs more room between lines than Latin at the same size: the script
+// carries marks above and below the baseline that collide at Latin leading.
+// Section 6.7 asks for this as a locale-scoped token rather than a component
+// override, so it applies everywhere at once.
+:root[dir='rtl'] body { line-height: 1.75; }
+
+img { max-width: 100%; height: auto; }
+
+a { color: v.$accent-ink; }
+a, button { @include m.focus-ring; }
+
+.page {
+  @include m.page-width;
+  padding-block: v.$space-lg v.$space-2xl;
+  min-height: 60vh;
+}
+
+// Visible only when focused: the first thing a keyboard user reaches, and
+// invisible to everyone else.
+.skip-link {
+  position: absolute;
+  inset-inline-start: -9999px;
+
+  &:focus {
+    inset-inline-start: v.$space-md;
+    top: v.$space-md;
+    z-index: 100;
+    background: v.$surface;
+    padding: v.$space-sm v.$space-md;
+    border-radius: v.$radius;
+    box-shadow: v.$shadow-md;
+  }
+}
+
+h1, h2, h3 {
+  font-weight: 600;
+  letter-spacing: v.$tracking-tight;
+  color: v.$ink;
+}
+
+h1 {
+  font-size: v.$text-xl;
+  line-height: 1.15;
+  margin-block: 0 v.$space-md;
+}
+
+h2 { font-size: v.$text-lg; line-height: 1.25; }
+h3 { font-size: v.$text-md; line-height: 1.3; }
+
+// Present for a screen reader, absent for everyone else. Used for labels whose
+// meaning is obvious visually but invisible to assistive technology.
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
