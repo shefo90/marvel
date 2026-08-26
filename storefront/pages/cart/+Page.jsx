@@ -1,6 +1,9 @@
 import Price from '../../components/common/Price/Price.jsx';
 import { useCart } from '../../hooks/useCart.jsx';
 import { useLocale } from '../../hooks/useLocale.jsx';
+import { useTrackOnce } from '../../hooks/useTrackEvent.js';
+import { pushEvent } from '../../services/dataLayer.js';
+import { removeFromCart, viewCart } from '../../utils/events.js';
 import { money } from '../../utils/format.js';
 import styles from './cart.module.scss';
 
@@ -45,6 +48,10 @@ export default function CartPage() {
 
   const items = cart?.items ?? [];
 
+  // Keyed on the cart token, same rule as begin_checkout: returning to the
+  // cart with the same basket does not count as viewing it again.
+  useTrackOnce(items.length > 0 ? cart?.token : null, () => viewCart(cart, { locale }));
+
   return (
     <>
       <h1>{copy.heading}</h1>
@@ -85,9 +92,21 @@ export default function CartPage() {
                     min="1"
                     value={item.quantity}
                     disabled={busy}
-                    onChange={(event) =>
-                      setQuantity(item.variant_id, Number(event.target.value))
-                    }
+                    onChange={(event) => {
+                      const raw = event.target.value;
+                      // Number('') is 0. Selecting the field and pressing
+                      // Backspace before typing a new quantity produces this
+                      // exact intermediate value -- it is not the shopper
+                      // choosing zero, and must not read as a removal.
+                      if (raw === '') return;
+                      const quantity = Number(raw);
+                      if (Number.isNaN(quantity)) return;
+                      // The API treats quantity: 0 as a removal, not a
+                      // set-to-zero -- so this is the same event the Remove
+                      // button fires, reached by a second path.
+                      if (quantity === 0) pushEvent(removeFromCart(item, { locale }));
+                      setQuantity(item.variant_id, quantity);
+                    }}
                   />
                 </label>
 
@@ -97,7 +116,13 @@ export default function CartPage() {
                   type="button"
                   className={styles.remove}
                   disabled={busy}
-                  onClick={() => remove(item.variant_id)}
+                  onClick={() => {
+                    // Fired before the async removal, same rule as
+                    // add_to_cart on the product page: the event exists even
+                    // if the request that follows it fails.
+                    pushEvent(removeFromCart(item, { locale }));
+                    remove(item.variant_id);
+                  }}
                 >
                   {copy.remove}
                 </button>
