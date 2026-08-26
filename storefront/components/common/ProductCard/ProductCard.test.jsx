@@ -1,8 +1,15 @@
-import { screen } from '@testing-library/react';
-import { expect, it } from 'vitest';
+import { fireEvent, screen } from '@testing-library/react';
+import { afterEach, beforeEach, expect, it } from 'vitest';
 
 import { renderAt } from '../../../test/render.jsx';
 import ProductCard from './ProductCard.jsx';
+
+beforeEach(() => {
+  window.dataLayer = [];
+});
+afterEach(() => {
+  delete window.dataLayer;
+});
 
 const PRODUCT = {
   id: 7,
@@ -41,4 +48,17 @@ it('shows a markdown as two prices, the old one struck through', () => {
   // current rather than reading two prices with no relationship.
   const struck = screen.getByText((_, node) => node.tagName === 'S');
   expect(struck).toBeInTheDocument();
+});
+
+it('fires select_item with the list identity a click came from', () => {
+  renderAt(
+    <ProductCard product={PRODUCT} index={2} listId="new_in" listName="New in" />,
+  );
+
+  fireEvent.click(screen.getByRole('link'));
+
+  const pushed = window.dataLayer.at(-1);
+  expect(pushed.event).toBe('select_item');
+  expect(pushed.ecommerce.item_list_id).toBe('new_in');
+  expect(pushed.ecommerce.items[0].index).toBe(2);
 });

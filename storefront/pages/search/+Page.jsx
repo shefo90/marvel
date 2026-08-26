@@ -80,7 +80,13 @@ export default function SearchPage() {
           {listing.items.map((product, index) => (
             // The list identity travels on each item from the API, which is
             // what keeps a select_item consistent with the impression above it.
-            <ProductCard key={product.id} product={product} index={index} />
+            <ProductCard
+              key={product.id}
+              product={product}
+              index={index}
+              listId={listing.item_list_id ?? 'search'}
+              listName={listing.item_list_name ?? 'Search results'}
+            />
           ))}
         </div>
       ) : null}

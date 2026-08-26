@@ -182,6 +182,9 @@ services:
       # The public address, so this is the one value here that must NOT be an
       # internal service name.
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost}
+      # Left empty by default -- see storefront/.env.example. Consent Mode v2
+      # defaults still ship with no container configured.
+      GTM_CONTAINER_ID: ${GTM_CONTAINER_ID:-}
     # No published port: reached through Caddy, which leaves 3000 free for
     # `npm run dev`.
 

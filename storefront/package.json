@@ -5,11 +5,11 @@
   "type": "module",
   "description": "Server-rendered bilingual storefront. The URL decides the language.",
   "scripts": {
-    "dev": "node server.js",
+    "dev": "node --env-file-if-exists=.env server.js",
     "build": "vite build",
-    "preview": "NODE_ENV=production node server.js",
+    "preview": "NODE_ENV=production node --env-file-if-exists=.env server.js",
     "test": "vitest run",
-    "start": "node server.js"
+    "start": "node --env-file-if-exists=.env server.js"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.4",

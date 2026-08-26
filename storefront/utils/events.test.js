@@ -4,8 +4,11 @@ import {
   addToCart,
   beginCheckout,
   purchase,
+  removeFromCart,
   search,
+  selectItem,
   toItem,
+  viewCart,
   viewItem,
   viewItemList,
 } from './events.js';
@@ -101,6 +104,44 @@ it('checks out at the total the shopper was shown', () => {
 
   expect(event.value).toBe(2078.4);
   expect(event.items[0].quantity).toBe(2);
+});
+
+it('views the cart at the total the shopper was shown', () => {
+  // Same rule as begin_checkout: the cart's own total, promotions included,
+  // not a re-derivation.
+  const event = viewCart(
+    {
+      total: '2078.40',
+      items: [
+        { sku: 'SUEDE-1-38', title: 'Suede Sandal', unit_price_effective: '1299.00', quantity: 2 },
+      ],
+    },
+    { locale: 'en' },
+  );
+
+  expect(event.event).toBe('view_cart');
+  expect(event.value).toBe(2078.4);
+  expect(event.items[0].quantity).toBe(2);
+});
+
+it('values a cart removal at that line only, not the whole basket', () => {
+  const event = removeFromCart(
+    { sku: 'SUEDE-1-38', title: 'Suede Sandal', unit_price_effective: '1299.00', quantity: 2 },
+    { locale: 'en' },
+  );
+
+  expect(event.event).toBe('remove_from_cart');
+  expect(event.value).toBe(2598);
+  expect(event.items[0].item_id).toBe('SUEDE-1-38');
+});
+
+it('carries the list identity a click came from', () => {
+  const event = selectItem(PRODUCT, { index: 2, listId: 'new_in', listName: 'New in', locale: 'en' });
+
+  expect(event.event).toBe('select_item');
+  expect(event.item_list_id).toBe('new_in');
+  expect(event.items[0].index).toBe(2);
+  expect(event.items[0].item_id).toBe('SUEDE-1-38');
 });
 
 it('uses the order number as the transaction id', () => {

@@ -21,12 +21,18 @@ function Divider({ children, href, more }) {
   );
 }
 
-function Showcase({ listing, emptyNote }) {
+function Showcase({ listing, emptyNote, listId, listName }) {
   if (!listing?.items?.length) return <p className={styles.empty}>{emptyNote}</p>;
   return (
     <div className={styles.grid}>
       {listing.items.map((product, index) => (
-        <ProductCard key={product.id} product={product} index={index} />
+        <ProductCard
+          key={product.id}
+          product={product}
+          index={index}
+          listId={listId}
+          listName={listName}
+        />
       ))}
     </div>
   );
@@ -101,21 +107,21 @@ export default function HomePage() {
         <Divider href={href('/c/shoes')} more={copy.viewAll}>
           {copy.shoes}
         </Divider>
-        <Showcase listing={shoes} />
+        <Showcase listing={shoes} listId="shoes" listName={copy.shoes} />
       </section>
 
       <section className={styles.section}>
         <Divider href={href('/c/bags')} more={copy.viewAll}>
           {copy.bags}
         </Divider>
-        <Showcase listing={bags} />
+        <Showcase listing={bags} listId="bags" listName={copy.bags} />
       </section>
 
       <section className={styles.section}>
         <Divider href={href('/c/shoes')} more={copy.viewAll}>
           {copy.newIn}
         </Divider>
-        <Showcase listing={listing} />
+        <Showcase listing={listing} listId={listId} listName={copy.newIn} />
       </section>
 
       {collections.length ? (

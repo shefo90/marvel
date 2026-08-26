@@ -121,6 +121,47 @@ export function beginCheckout(cart, { locale }) {
   };
 }
 
+export function viewCart(cart, { locale }) {
+  const items = (cart.items ?? []).map((line, index) =>
+    toItem(
+      {
+        sku: line.sku,
+        title: line.title,
+        price: line.unit_price_effective ?? line.unit_price_snapshot,
+        currency: 'EGP',
+      },
+      { index, quantity: line.quantity },
+    ),
+  );
+  return {
+    event: 'view_cart',
+    currency: 'EGP',
+    // The cart's own total, same rule as begin_checkout: not a re-derivation.
+    value: num(cart.total ?? sum(items)),
+    locale,
+    items,
+  };
+}
+
+export function removeFromCart(line, { locale }) {
+  const item = toItem(
+    {
+      sku: line.sku,
+      title: line.title,
+      price: line.unit_price_effective ?? line.unit_price_snapshot,
+      currency: 'EGP',
+    },
+    { quantity: line.quantity },
+  );
+  return {
+    event: 'remove_from_cart',
+    currency: 'EGP',
+    value: item.price * (line.quantity ?? 1),
+    locale,
+    items: [item],
+  };
+}
+
 export function purchase(order, { locale }) {
   const items = (order.items ?? []).map((line, index) =>
     toItem(

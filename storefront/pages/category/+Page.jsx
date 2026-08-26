@@ -96,7 +96,13 @@ export default function CategoryPage() {
           ) : (
             <div className={styles.grid}>
               {listing.items.map((product, index) => (
-                <ProductCard key={product.id} product={product} index={index} />
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  index={index}
+                  listId={category.list_id}
+                  listName={category.title}
+                />
               ))}
             </div>
           )}

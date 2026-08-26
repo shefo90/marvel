@@ -1,6 +1,8 @@
 import Price from '../Price/Price.jsx';
 import ProductImage from '../ProductImage/ProductImage.jsx';
 import { useLocale } from '../../../hooks/useLocale.jsx';
+import { pushEvent } from '../../../services/dataLayer.js';
+import { selectItem } from '../../../utils/events.js';
 import styles from './ProductCard.module.scss';
 
 const COPY = {
@@ -25,7 +27,7 @@ const COPY = {
  * already. It is `aria-hidden` — it is the same product, and announcing it
  * twice tells a screen-reader user there are two.
  */
-export default function ProductCard({ product, index = 0 }) {
+export default function ProductCard({ product, index = 0, listId, listName }) {
   const { href, locale } = useLocale();
   const copy = COPY[locale] ?? COPY.en;
 
@@ -35,9 +37,15 @@ export default function ProductCard({ product, index = 0 }) {
   const colours = product.colors ?? [];
   const sizes = product.sizes ?? [];
 
+  // Fired on click, not on render: an impression is view_item_list's job
+  // (the listing page already sends it), and firing this on mount too would
+  // report every card in the grid as selected.
+  const onSelect = () =>
+    pushEvent(selectItem(product, { index, listId, listName, locale }));
+
   return (
     <article className={styles.card}>
-      <a className={styles.link} href={href(`/products/${product.slug}`)}>
+      <a className={styles.link} href={href(`/products/${product.slug}`)} onClick={onSelect}>
         <div className={styles.frame}>
           <ProductImage
             image={image}

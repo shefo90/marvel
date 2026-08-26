@@ -73,7 +73,13 @@ export default function CollectionPage() {
           ) : (
             <div className={styles.grid}>
               {listing.items.map((product, index) => (
-                <ProductCard key={product.id} product={product} index={index} />
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  index={index}
+                  listId={collection.list_id}
+                  listName={collection.title}
+                />
               ))}
             </div>
           )}
