@@ -256,19 +256,22 @@
 
 .editFrame {
   display: block;
+  position: relative;
   aspect-ratio: 3 / 2;
-
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-    opacity: 0.72;
-    transition: transform 600ms v.$ease, opacity v.$duration v.$ease;
-  }
 }
 
-.edits a:hover .editFrame img { transform: scale(1.06); opacity: 0.85; }
+.editLayer {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  transition: opacity 1.4s ease, transform 600ms v.$ease;
+}
+
+.editLayerActive { opacity: 0.72; }
+
+.edits a:hover .editLayerActive { transform: scale(1.06); opacity: 0.85; }
 
 .editBody {
   position: absolute;
@@ -332,8 +335,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .heroCta, .heroGhost, .tileFrame img, .editFrame img { transition: none; }
+  .heroCta, .heroGhost, .tileFrame img, .editLayer { transition: none; }
   .heroCta:hover { transform: none; }
   .tiles a:hover .tileFrame img,
-  .edits a:hover .editFrame img { transform: none; }
+  .edits a:hover .editLayerActive { transform: none; }
 }

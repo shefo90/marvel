@@ -10,14 +10,16 @@ import styles from './index.module.scss';
 const ROTATE_MS = 5000;
 
 /**
- * Cross-fades through a set of background images.
+ * Cross-fades through a set of background images, sized and styled by
+ * whatever `layerClass`/`activeClass` the caller passes -- the hero and each
+ * Edits tile share this same rotator over different-sized boxes.
  *
- * The slide list comes from `listing`, which is already the same
- * locale-scoped, published-only, non-archived set the "New in" section below
- * renders -- so nothing in draft or archived can ever end up here without a
- * separate query, only a different filter on the one that already excludes it.
+ * Callers are responsible for only ever passing already locale-scoped,
+ * published-only, non-archived images (the same `listProducts` result every
+ * other section on this page renders from), never a separate, easier-to-drift
+ * query.
  */
-function HeroSlides({ slides }) {
+function RotatingLayers({ slides, layerClass, activeClass }) {
   const [active, setActive] = useState(0);
 
   useEffect(() => {
@@ -34,7 +36,7 @@ function HeroSlides({ slides }) {
   return slides.map((image, index) => (
     <div
       key={image.url}
-      className={index === active ? `${styles.heroLayer} ${styles.heroLayerActive}` : styles.heroLayer}
+      className={index === active ? `${layerClass} ${activeClass}` : layerClass}
       style={{ backgroundImage: `url(${image.url})` }}
       aria-hidden="true"
     />
@@ -99,7 +101,11 @@ export default function HomePage() {
   return (
     <>
       <section className={styles.hero}>
-        <HeroSlides slides={slides} />
+        <RotatingLayers
+          slides={slides}
+          layerClass={styles.heroLayer}
+          activeClass={styles.heroLayerActive}
+        />
         <div className={styles.heroScrim} aria-hidden="true" />
         <div className={styles.heroText}>
           <span className={styles.eyebrow}>{copy.eyebrow}</span>
@@ -166,26 +172,30 @@ export default function HomePage() {
         <section className={styles.section}>
           <Divider>{copy.edits}</Divider>
           <ul className={styles.edits}>
-            {collections.map((collection) => (
-              <li key={collection.id}>
-                <a href={href(`/edit/${collection.slug}`)}>
-                  <span className={styles.editFrame}>
-                    {collection.image ? (
-                      <img
-                        src={collection.image.url}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
+            {collections.map((collection) => {
+              const editSlides = collection.tileImages?.length
+                ? collection.tileImages
+                : collection.image
+                  ? [collection.image]
+                  : [];
+              return (
+                <li key={collection.id}>
+                  <a href={href(`/edit/${collection.slug}`)}>
+                    <span className={styles.editFrame}>
+                      <RotatingLayers
+                        slides={editSlides}
+                        layerClass={styles.editLayer}
+                        activeClass={styles.editLayerActive}
                       />
-                    ) : null}
-                  </span>
-                  <span className={styles.editBody}>
-                    <span className={styles.editTitle}>{collection.title}</span>
-                    <span className={styles.editCta}>{copy.viewAll}</span>
-                  </span>
-                </a>
-              </li>
-            ))}
+                    </span>
+                    <span className={styles.editBody}>
+                      <span className={styles.editTitle}>{collection.title}</span>
+                      <span className={styles.editCta}>{copy.viewAll}</span>
+                    </span>
+                  </a>
+                </li>
+              );
+            })}
           </ul>
         </section>
       ) : null}

@@ -86,14 +86,30 @@ export async function data(pageContext) {
   const shoesSlug = shoesCategory?.slug ?? 'shoes';
   const bagsSlug = bagsCategory?.slug ?? 'bags';
 
-  const [shoes, bags] = await Promise.all([
+  const [shoes, bags, collectionTiles] = await Promise.all([
     shoesCategory
       ? listProducts(locale, { category: shoesSlug, pageSize: 4 }).catch(() => empty)
       : empty,
     bagsCategory
       ? listProducts(locale, { category: bagsSlug, pageSize: 4 }).catch(() => empty)
       : empty,
+    // Each Edits tile rotates through its own collection's member photos
+    // rather than freezing on whichever product the operator put first.
+    // Reuses the exact same locale-scoped, published-only, non-archived
+    // product listing every other section already relies on.
+    Promise.all(
+      collections.map((collection) =>
+        listProducts(locale, { collection: collection.slug, pageSize: 6 }).catch(() => empty),
+      ),
+    ),
   ]);
+
+  const collectionsWithTiles = collections.map((collection, index) => {
+    const tileImages = collectionTiles[index].items
+      .map((product) => product.primary_image)
+      .filter(Boolean);
+    return { ...collection, tileImages };
+  });
 
   return {
     locale,
@@ -103,7 +119,7 @@ export async function data(pageContext) {
     shoesSlug,
     bagsSlug,
     categories,
-    collections,
+    collections: collectionsWithTiles,
     copy,
     head: {
       title: copy.title,
