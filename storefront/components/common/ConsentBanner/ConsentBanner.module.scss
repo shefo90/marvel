@@ -1,0 +1,71 @@
+@use '../../../assets/styles/variables' as v;
+@use '../../../assets/styles/mixins' as m;
+
+.banner {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 200;
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: v.$space-sm v.$space-lg;
+
+  padding: v.$space-md v.$space-lg;
+  background: v.$night;
+  color: #fff;
+  box-shadow: v.$shadow-lg;
+}
+
+.message {
+  margin: 0;
+  font-size: v.$text-sm;
+  max-width: 68ch;
+}
+
+.link {
+  color: #fff;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  gap: v.$space-sm;
+  flex-shrink: 0;
+}
+
+.accept,
+.reject {
+  padding: 0.5rem 1.1rem;
+  border-radius: v.$radius-pill;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: v.$text-sm;
+  cursor: pointer;
+  transition: background v.$duration v.$ease;
+  @include m.focus-ring;
+}
+
+.accept {
+  background: v.$accent;
+  color: #fff;
+
+  &:hover { background: v.$accent-ink; }
+}
+
+.reject {
+  background: transparent;
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
+
+  &:hover { background: rgba(255, 255, 255, 0.1); }
+}
+
+@media (max-width: 560px) {
+  .banner { justify-content: flex-start; }
+  .actions { width: 100%; }
+  .accept, .reject { flex: 1; }
+}

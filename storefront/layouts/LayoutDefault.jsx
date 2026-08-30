@@ -1,3 +1,4 @@
+import ConsentBanner from '../components/common/ConsentBanner/ConsentBanner.jsx';
 import Footer from '../components/common/Footer/Footer.jsx';
 import Header from '../components/common/Header/Header.jsx';
 import { AccountProvider } from '../hooks/useAccount.jsx';
@@ -29,6 +30,7 @@ export default function Layout({ children, pageContext }) {
             {children}
           </main>
           <Footer />
+          <ConsentBanner />
           </CartProvider>
         </AccountProvider>
       </LocaleProvider>

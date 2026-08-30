@@ -2,7 +2,7 @@ import { renderToString } from 'react-dom/server';
 import { dangerouslySkipEscape, escapeInject } from 'vike/server';
 
 import Layout from '../layouts/LayoutDefault.jsx';
-import { consentAndGtmSnippet } from '../services/dataLayer.js';
+import { consentAndGtmSnippet, readConsentCookie } from '../services/dataLayer.js';
 import { buildHead } from '../utils/head.js';
 import { localeOf } from '../utils/locales.js';
 
@@ -31,8 +31,10 @@ export default function onRenderHtml(pageContext) {
 
   // Consent defaults and the container, in the FIRST response and before
   // anything else. Consent set after GTM has loaded is set after tags have
-  // already decided what to do.
-  const measurement = consentAndGtmSnippet(process.env.GTM_CONTAINER_ID);
+  // already decided what to do. A returning visitor's remembered choice rides
+  // in on the cookie, so their defaults already match it -- no denied first hit.
+  const consent = readConsentCookie(pageContext.headers?.cookie);
+  const measurement = consentAndGtmSnippet(process.env.GTM_CONTAINER_ID, consent);
 
   return escapeInject`<!DOCTYPE html>
 <html lang="${code}" dir="${dir}">
