@@ -33,6 +33,7 @@ from models.product_images import ProductImage
 from models.product_translations import ProductTranslation
 from models.product_variants import ProductVariant
 from models.products import Product
+from repositories.pricing import price_basket
 from services import cache
 
 
@@ -56,7 +57,19 @@ def _image_payload(img: ProductImage) -> dict:
     }
 
 
-def _variant_payload(v: ProductVariant) -> dict:
+def _variant_payload(v: ProductVariant, *, effective_price=None) -> dict:
+    """One variant's card. ``effective_price`` is ``price_basket``'s resolved
+    per-unit price, when the caller has one -- see the module docstring on why
+    that function, not a second read of ``sale_price``, is what decides
+    whether this variant looks discounted. It already picks the better of the
+    manual sale price and any live promotion, so it fully replaces the raw
+    column here rather than only applying on top of it.
+    """
+    sale_price = None
+    if effective_price is not None and effective_price < v.price:
+        sale_price = str(effective_price)
+    elif effective_price is None and v.sale_price is not None:
+        sale_price = str(v.sale_price)
     return {
         "id": v.id,
         "sku": v.sku,
@@ -66,7 +79,7 @@ def _variant_payload(v: ProductVariant) -> dict:
         "color": v.color,
         "material": v.material,
         "price": str(v.price),
-        "sale_price": str(v.sale_price) if v.sale_price is not None else None,
+        "sale_price": sale_price,
         "currency": v.currency,
         "availability": v.availability.value
         if hasattr(v.availability, "value")
@@ -129,6 +142,12 @@ def get_product_by_slug(db: Session, locale: str, slug: str) -> dict | None:
         default_sku = next(
             (v.sku for v in active_variants if v.id == product.default_variant_id), None
         )
+        # The same pricing resolution the cart uses, so an active offer shows
+        # up here instead of only appearing once a shopper reaches checkout.
+        effective_price_by_variant = {
+            line.variant_id: line.unit_price
+            for line in price_basket(db, [(v, 1) for v in active_variants])
+        }
 
         return {
             "id": product.id,
@@ -158,7 +177,10 @@ def get_product_by_slug(db: Session, locale: str, slug: str) -> dict | None:
                 _image_payload(i)
                 for i in sorted(product.images, key=lambda i: i.position)
             ],
-            "variants": [_variant_payload(v) for v in active_variants],
+            "variants": [
+                _variant_payload(v, effective_price=effective_price_by_variant.get(v.id))
+                for v in active_variants
+            ],
             "default_variant_sku": default_sku,
         }
 
@@ -465,6 +487,14 @@ def list_products(
                     if variant.size not in sizes_by_product[variant.product_id]:
                         sizes_by_product[variant.product_id].append(variant.size)
 
+        # The same pricing resolution the cart uses, one call for the whole
+        # page rather than one per card, so an active offer shows a markdown
+        # here instead of only surfacing once a shopper reaches checkout.
+        effective_price_by_variant = {
+            line.variant_id: line.unit_price
+            for line in price_basket(db, [(v, 1) for v in cheapest_by_product.values()])
+        }
+
         # Two images per product: the primary, and the next one in position
         # order for the hover swap. One query, not two per card.
         images_by_product: dict[int, list[ProductImage]] = {}
@@ -516,9 +546,13 @@ def list_products(
                     # item_id and every join from impression to revenue breaks.
                     "sku": cheapest.sku if cheapest else None,
                     "price": str(cheapest.price) if cheapest else None,
-                    "sale_price": str(cheapest.sale_price)
-                    if cheapest and cheapest.sale_price is not None
-                    else None,
+                    "sale_price": (
+                        str(effective_price_by_variant[cheapest.id])
+                        if cheapest
+                        and cheapest.id in effective_price_by_variant
+                        and effective_price_by_variant[cheapest.id] < cheapest.price
+                        else None
+                    ),
                     "currency": "EGP",
                     "primary_image": _image_payload(gallery[0]) if gallery else None,
                     # The card swaps to this on hover. Null when the product has
