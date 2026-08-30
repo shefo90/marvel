@@ -106,7 +106,7 @@ export default function HomePage() {
           <h1>{copy.heroTitle}</h1>
           <p>{copy.heroBody}</p>
           <div className={styles.heroActions}>
-            <a className={styles.heroCta} href={href(shoesPath)}>
+            <a className={styles.heroCta} href={href('/new-in')}>
               {copy.heroCta}
             </a>
             <a className={styles.heroGhost} href={href(bagsPath)}>
