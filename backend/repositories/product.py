@@ -28,6 +28,7 @@ from models.categories import Category
 from models.category_translations import CategoryTranslation
 from models.collections import Collection
 from models.collection_products import CollectionProduct
+from models.collection_translations import CollectionTranslation
 from models.product_images import ProductImage
 from models.product_translations import ProductTranslation
 from models.product_variants import ProductVariant
@@ -354,11 +355,20 @@ def list_products(
             if category_ids is not None:
                 stmt = stmt.where(Product.category_id.in_(category_ids))
             if collection_slug:
+                # Collection.slug is the base, never-translated identifier --
+                # matching it against a URL slug is exactly the bug that made
+                # "Shoes" 404 for categories with a real Arabic slug. A
+                # collection page is reached by its per-locale translated
+                # slug, so that is what has to be matched here too.
                 stmt = stmt.join(
                     CollectionProduct, CollectionProduct.product_id == Product.id
                 ).join(
                     Collection, Collection.id == CollectionProduct.collection_id
-                ).where(Collection.slug == collection_slug)
+                ).join(
+                    CollectionTranslation,
+                    (CollectionTranslation.collection_id == Collection.id)
+                    & (CollectionTranslation.locale == locale),
+                ).where(CollectionTranslation.slug == collection_slug)
             if q:
                 stmt = stmt.where(_matches_query(q, locale))
             return stmt.where(
@@ -374,7 +384,13 @@ def list_products(
         if collection_slug:
             collection_join = True
             coll = db.execute(
-                select(Collection).where(Collection.slug == collection_slug)
+                select(Collection)
+                .join(
+                    CollectionTranslation,
+                    (CollectionTranslation.collection_id == Collection.id)
+                    & (CollectionTranslation.locale == locale),
+                )
+                .where(CollectionTranslation.slug == collection_slug)
             ).scalar_one_or_none()
             if coll:
                 list_id, list_name = coll.list_id, coll.name
