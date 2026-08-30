@@ -38,6 +38,7 @@ RUN printf '%s\n' \
     ':80 {' \
     '  root * /srv' \
     '  encode gzip zstd' \
+    '  redir /admin /admin/ 308' \
     '  handle_path /admin/* {' \
     '    root * /srv/admin' \
     '    try_files {path} /index.html' \
