@@ -61,6 +61,45 @@ const COPY = {
 };
 
 /**
+ * Turns the API's error shape into something a shopper can act on.
+ *
+ * A plain string (e.g. "cart is empty", "only 2 left for this size") is
+ * already meant to be read as-is. A validation failure instead arrives as a
+ * list of `{loc, msg}` entries -- one per field -- which is why the previous
+ * version of this handler collapsed every non-string case to one generic
+ * "fill in every field" message: that's true for a missing field, but the
+ * exact same code path fired for a stray extra space, a length limit, or
+ * anything else the shape check catches, none of which "fill in every field"
+ * actually describes.
+ */
+function describeError(detail, copy) {
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail) && detail.length) {
+    const labels = {
+      email: copy.email,
+      phone: copy.phone,
+      first_name: copy.firstName,
+      last_name: copy.lastName,
+      recipient_name: copy.recipient,
+      governorate: copy.governorate,
+      city: copy.city,
+      street_address: copy.street,
+      building: copy.building,
+    };
+    const message = detail
+      .map((entry) => {
+        const field = entry?.loc?.[entry.loc.length - 1];
+        const label = labels[field];
+        return label ? `${label}: ${entry.msg}` : entry?.msg;
+      })
+      .filter(Boolean)
+      .join(' ');
+    if (message) return message;
+  }
+  return copy.required;
+}
+
+/**
  * Cash on delivery, and nothing else yet.
  *
  * COD is the whole payment story until S4 selects a gateway, and it is a
@@ -126,8 +165,7 @@ export default function CheckoutPage() {
       reset();
       await navigate(href(`/order/${order.order_number}`));
     } catch (failure) {
-      const detail = failure?.response?.data?.detail;
-      setError(typeof detail === 'string' ? detail : copy.required);
+      setError(describeError(failure?.response?.data?.detail, copy));
       setPending(false);
     }
   };
