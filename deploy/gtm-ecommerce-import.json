@@ -1,0 +1,108 @@
+{
+  "exportFormatVersion": 2,
+  "exportTime": "2026-08-30 00:00:00",
+  "containerVersion": {
+    "path": "accounts/6373343158/containers/262269704/versions/0",
+    "accountId": "6373343158",
+    "containerId": "262269704",
+    "containerVersionId": "0",
+    "container": {
+      "path": "accounts/6373343158/containers/262269704",
+      "accountId": "6373343158",
+      "containerId": "262269704",
+      "name": "marvel",
+      "publicId": "GTM-MBQS3H5D",
+      "usageContext": [
+        "WEB"
+      ],
+      "fingerprint": "0",
+      "tagManagerUrl": "https://tagmanager.google.com/#/container/accounts/6373343158/containers/262269704/workspaces?apiLink=container",
+      "tagIds": [
+        "GTM-MBQS3H5D"
+      ]
+    },
+    "tag": [
+      {
+        "accountId": "6373343158",
+        "containerId": "262269704",
+        "tagId": "100",
+        "name": "GA4 - Ecommerce (all events)",
+        "type": "gaawe",
+        "parameter": [
+          {
+            "type": "BOOLEAN",
+            "key": "sendEcommerceData",
+            "value": "true"
+          },
+          {
+            "type": "TEMPLATE",
+            "key": "getEcommerceDataFrom",
+            "value": "dataLayer"
+          },
+          {
+            "type": "TEMPLATE",
+            "key": "eventName",
+            "value": "{{Event}}"
+          },
+          {
+            "type": "LIST",
+            "key": "eventSettingsTable",
+            "list": []
+          },
+          {
+            "type": "TEMPLATE",
+            "key": "measurementIdOverride",
+            "value": "G-NMTE492V5G"
+          }
+        ],
+        "fingerprint": "0",
+        "firingTriggerId": [
+          "100"
+        ],
+        "tagFiringOption": "ONCE_PER_EVENT",
+        "monitoringMetadata": {
+          "type": "MAP"
+        },
+        "consentSettings": {
+          "consentStatus": "NOT_SET"
+        }
+      }
+    ],
+    "trigger": [
+      {
+        "accountId": "6373343158",
+        "containerId": "262269704",
+        "triggerId": "100",
+        "name": "Ecommerce events",
+        "type": "CUSTOM_EVENT",
+        "customEventFilter": [
+          {
+            "type": "MATCH_REGEX",
+            "parameter": [
+              {
+                "type": "TEMPLATE",
+                "key": "arg0",
+                "value": "{{_event}}"
+              },
+              {
+                "type": "TEMPLATE",
+                "key": "arg1",
+                "value": "^(add_to_cart|remove_from_cart|begin_checkout|view_cart|view_item|view_item_list|select_item|purchase|search)$"
+              }
+            ]
+          }
+        ],
+        "fingerprint": "0"
+      }
+    ],
+    "builtInVariable": [
+      {
+        "accountId": "6373343158",
+        "containerId": "262269704",
+        "type": "EVENT",
+        "name": "Event"
+      }
+    ],
+    "fingerprint": "0"
+  }
+}
