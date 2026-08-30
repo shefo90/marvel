@@ -9,6 +9,7 @@ import { beginCheckout, purchase } from '../../utils/events.js';
 import { clearCartToken } from '../../services/api.js';
 import { placeOrder } from '../../services/cart.service.js';
 import { money } from '../../utils/format.js';
+import { randomId } from '../../utils/ids.js';
 import styles from './checkout.module.scss';
 
 const COPY = {
@@ -150,7 +151,7 @@ export default function CheckoutPage() {
         // One key per attempt. The API refuses an order without it, and it is
         // what makes a double-click or a retry return the same order rather
         // than creating a second one.
-        crypto.randomUUID(),
+        randomId(),
       );
 
       // Fired before the cart is cleared and before navigating, so the event
