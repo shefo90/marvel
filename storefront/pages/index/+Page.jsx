@@ -39,8 +39,10 @@ function Showcase({ listing, emptyNote, listId, listName }) {
 }
 
 export default function HomePage() {
-  const { listing, shoes, bags, categories, collections, copy } = useData();
+  const { listing, shoes, bags, shoesSlug, bagsSlug, categories, collections, copy } = useData();
   const { locale, href } = useLocale();
+  const shoesPath = `/c/${shoesSlug}`;
+  const bagsPath = `/c/${bagsSlug}`;
 
   // Section 5's item_list_id. The same value travels with an add to cart and
   // ends up snapshotted on order_items, which is what makes the journey from
@@ -68,10 +70,10 @@ export default function HomePage() {
           <h1>{copy.heroTitle}</h1>
           <p>{copy.heroBody}</p>
           <div className={styles.heroActions}>
-            <a className={styles.heroCta} href={href('/c/shoes')}>
+            <a className={styles.heroCta} href={href(shoesPath)}>
               {copy.heroCta}
             </a>
-            <a className={styles.heroGhost} href={href('/c/bags')}>
+            <a className={styles.heroGhost} href={href(bagsPath)}>
               {copy.heroCtaAlt}
             </a>
           </div>
@@ -104,21 +106,21 @@ export default function HomePage() {
       ) : null}
 
       <section className={styles.section}>
-        <Divider href={href('/c/shoes')} more={copy.viewAll}>
+        <Divider href={href(shoesPath)} more={copy.viewAll}>
           {copy.shoes}
         </Divider>
         <Showcase listing={shoes} listId="shoes" listName={copy.shoes} />
       </section>
 
       <section className={styles.section}>
-        <Divider href={href('/c/bags')} more={copy.viewAll}>
+        <Divider href={href(bagsPath)} more={copy.viewAll}>
           {copy.bags}
         </Divider>
         <Showcase listing={bags} listId="bags" listName={copy.bags} />
       </section>
 
       <section className={styles.section}>
-        <Divider href={href('/c/shoes')} more={copy.viewAll}>
+        <Divider href={href(shoesPath)} more={copy.viewAll}>
           {copy.newIn}
         </Divider>
         <Showcase listing={listing} listId={listId} listName={copy.newIn} />

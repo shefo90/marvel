@@ -64,16 +64,35 @@ export async function data(pageContext) {
   const copy = COPY[locale];
   const origin = publicOrigin();
 
-  // One await, not five in sequence. These are independent reads and the page
+  // One await, not three in sequence. These are independent reads and the page
   // cannot render until the slowest returns either way, so serialising them
-  // would just add the other four latencies to it.
+  // would just add the other two latencies to it.
   const empty = { items: [], total: 0 };
-  const [listing, shoes, bags, categories, collections] = await Promise.all([
+  const [listing, categories, collections] = await Promise.all([
     listProducts(locale, { page: 1, pageSize: 8, sort: 'newest' }).catch(() => empty),
-    listProducts(locale, { category: 'shoes', pageSize: 4 }).catch(() => empty),
-    listProducts(locale, { category: 'bags', pageSize: 4 }).catch(() => empty),
     listCategories(locale).catch(() => []),
     listCollections(locale).catch(() => []),
+  ]);
+
+  // "Shoes" and "bags" are two specific level-1 categories, not a concept the
+  // API knows about -- the only stable way to find them from either
+  // language's tree is base_slug, which (unlike slug) is never translated.
+  // Once found, everything downstream uses that category's real slug for
+  // *this* locale, so an Arabic slug like "أحذية" resolves instead of 404ing
+  // against the English literal "shoes".
+  const findByBaseSlug = (baseSlug) => categories.find((node) => node.base_slug === baseSlug);
+  const shoesCategory = findByBaseSlug('shoes');
+  const bagsCategory = findByBaseSlug('bags');
+  const shoesSlug = shoesCategory?.slug ?? 'shoes';
+  const bagsSlug = bagsCategory?.slug ?? 'bags';
+
+  const [shoes, bags] = await Promise.all([
+    shoesCategory
+      ? listProducts(locale, { category: shoesSlug, pageSize: 4 }).catch(() => empty)
+      : empty,
+    bagsCategory
+      ? listProducts(locale, { category: bagsSlug, pageSize: 4 }).catch(() => empty)
+      : empty,
   ]);
 
   return {
@@ -81,6 +100,8 @@ export async function data(pageContext) {
     listing,
     shoes,
     bags,
+    shoesSlug,
+    bagsSlug,
     categories,
     collections,
     copy,

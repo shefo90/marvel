@@ -103,6 +103,7 @@ def _category_payload(
     return {
         "id": category.id,
         "slug": tr.slug,
+        "base_slug": category.slug,
         "title": tr.title,
         "description": tr.description,
         "level": category.level,

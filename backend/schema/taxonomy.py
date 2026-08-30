@@ -44,6 +44,11 @@ class taxonomy_node(BaseModel):
 class category_node(taxonomy_node):
     level: int
     children: list["category_node"] = []
+    # The category's own slug, never translated -- unlike `slug`, which is
+    # this locale's translated address. A caller that needs to find "the same
+    # category" across locales (the storefront homepage's featured sections,
+    # for one) has no other stable handle to match on.
+    base_slug: str
 
 
 class category_detail(category_node):
