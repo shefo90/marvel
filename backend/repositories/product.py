@@ -144,8 +144,12 @@ def get_product_by_slug(db: Session, locale: str, slug: str) -> dict | None:
         )
         # The same pricing resolution the cart uses, so an active offer shows
         # up here instead of only appearing once a shopper reaches checkout.
+        # price_basket's own `unit_price` is only the sale-price markdown --
+        # a promotion's cut lives separately in `discount_amount` per the
+        # module's money model, so `line_total` (at quantity 1, the fully
+        # resolved per-unit price) is the field that actually reflects both.
         effective_price_by_variant = {
-            line.variant_id: line.unit_price
+            line.variant_id: line.line_total
             for line in price_basket(db, [(v, 1) for v in active_variants])
         }
 
@@ -490,8 +494,9 @@ def list_products(
         # The same pricing resolution the cart uses, one call for the whole
         # page rather than one per card, so an active offer shows a markdown
         # here instead of only surfacing once a shopper reaches checkout.
+        # line_total, not unit_price -- see get_product_by_slug for why.
         effective_price_by_variant = {
-            line.variant_id: line.unit_price
+            line.variant_id: line.line_total
             for line in price_basket(db, [(v, 1) for v in cheapest_by_product.values()])
         }
 
