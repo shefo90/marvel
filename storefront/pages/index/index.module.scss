@@ -23,6 +23,27 @@
   color: #f6f1ea;
 }
 
+// One per slide, cross-fading by opacity rather than being swapped in JS —
+// swapping the DOM node on every rotation would restart any assistive tech
+// announcement and drop the transition entirely.
+.heroLayer {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  transition: opacity 1.4s ease;
+}
+
+.heroLayerActive {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heroLayer { transition: none; }
+}
+
 // A directional scrim, not a flat overlay. Text sits over the dark end while
 // the image stays legible at the other, which is what stops a photographic
 // hero from turning into mud.

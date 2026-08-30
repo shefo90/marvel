@@ -1,9 +1,45 @@
+import { useEffect, useState } from 'react';
+
 import ProductCard from '../../components/common/ProductCard/ProductCard.jsx';
 import { useData } from '../../hooks/useData.js';
 import { useLocale } from '../../hooks/useLocale.jsx';
 import { useTrackOnce } from '../../hooks/useTrackEvent.js';
 import { viewItemList } from '../../utils/events.js';
 import styles from './index.module.scss';
+
+const ROTATE_MS = 5000;
+
+/**
+ * Cross-fades through a set of background images.
+ *
+ * The slide list comes from `listing`, which is already the same
+ * locale-scoped, published-only, non-archived set the "New in" section below
+ * renders -- so nothing in draft or archived can ever end up here without a
+ * separate query, only a different filter on the one that already excludes it.
+ */
+function HeroSlides({ slides }) {
+  const [active, setActive] = useState(0);
+
+  useEffect(() => {
+    if (slides.length < 2) return undefined;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+    const id = setInterval(() => {
+      setActive((current) => (current + 1) % slides.length);
+    }, ROTATE_MS);
+    return () => clearInterval(id);
+    // Re-run only if the number of slides changes, not on every `active` tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slides.length]);
+
+  return slides.map((image, index) => (
+    <div
+      key={image.url}
+      className={index === active ? `${styles.heroLayer} ${styles.heroLayerActive}` : styles.heroLayer}
+      style={{ backgroundImage: `url(${image.url})` }}
+      aria-hidden="true"
+    />
+  ));
+}
 
 /** A centred heading with a rule running out to each side. */
 function Divider({ children, href, more }) {
@@ -52,18 +88,18 @@ export default function HomePage() {
     viewItemList(listing.items, { listId, listName: copy.newIn, locale }),
   );
 
-  // The hero borrows the lead category's artwork until an operator sets one.
-  const heroImage = categories[0]?.image?.url ?? null;
+  // The hero rotates through the newest published products' own photos. A
+  // brand-new shop with nothing published yet falls back to the lead
+  // category's artwork so the hero is never just an empty scrim.
+  const heroSlides = listing.items.map((product) => product.primary_image).filter(Boolean);
+  const heroFallback = categories[0]?.image ?? null;
+  const slides = heroSlides.length ? heroSlides : heroFallback ? [heroFallback] : [];
   const tiles = categories.flatMap((parent) => parent.children ?? []);
 
   return (
     <>
-      <section
-        className={styles.hero}
-        // Inline because the URL is data, not styling: it changes with the
-        // catalogue and cannot live in a stylesheet.
-        style={heroImage ? { backgroundImage: `url(${heroImage})` } : undefined}
-      >
+      <section className={styles.hero}>
+        <HeroSlides slides={slides} />
         <div className={styles.heroScrim} aria-hidden="true" />
         <div className={styles.heroText}>
           <span className={styles.eyebrow}>{copy.eyebrow}</span>
