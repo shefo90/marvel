@@ -120,7 +120,7 @@ export default function HomePage() {
       </section>
 
       <section className={styles.section}>
-        <Divider href={href(shoesPath)} more={copy.viewAll}>
+        <Divider href={href('/new-in')} more={copy.viewAll}>
           {copy.newIn}
         </Divider>
         <Showcase listing={listing} listId={listId} listName={copy.newIn} />
