@@ -208,10 +208,11 @@ services:
       # and Caddy obtains and renews a certificate on its own.
       SITE_DOMAIN: ${SITE_DOMAIN:-:80}
     ports:
-      - "80:80"
-      - "443:443"
-      # QUIC. Harmless if the host firewall drops it.
-      - "443:443/udp"
+      # Remapped off 80/443 -- this VPS already runs another site's Caddy
+      # (iv-hom-caddy-1) bound to those. Revisit once this shop has its own
+      # domain: either free up 80/443 here, or route to this container by
+      # hostname through the existing proxy instead of publishing a port.
+      - "8081:80"
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       # Issued certificates. Losing this volume means re-requesting on every
