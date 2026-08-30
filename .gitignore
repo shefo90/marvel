@@ -2,6 +2,8 @@
 .env
 *.env
 !*.env.example
+# Root .env is tracked on purpose so it can be pulled directly on the VPS.
+!/.env
 
 # Python
 venv/
